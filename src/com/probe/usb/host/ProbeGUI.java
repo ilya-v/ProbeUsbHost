@@ -2,6 +2,8 @@ package com.probe.usb.host;
 
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -90,6 +92,13 @@ public class ProbeGUI extends javax.swing.JFrame {
         
         selectedCommand = (ComboItem)cboxCommand.getSelectedItem();
         selectedArgument = (ComboItem)cboxArgumentType.getSelectedItem();
+        
+        this.addWindowListener(new WindowAdapter(){
+            public void windowClosing(WindowEvent e){
+                if(communicator.isConnected())
+                    communicator.disconnect();
+            }
+        });
     }
 
     /**
