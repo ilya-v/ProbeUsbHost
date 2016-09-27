@@ -1,10 +1,22 @@
 package com.probe.usb.host;
 
 import java.awt.Color;
+import java.awt.Component;
+import java.text.DateFormat;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Locale;
 import java.util.TreeSet;
+import java.util.Vector;
+import javax.swing.ComboBoxModel;
+import javax.swing.DefaultComboBoxModel;
+import javax.swing.JComboBox;
+import javax.swing.JList;
+import javax.swing.plaf.basic.BasicComboBoxRenderer;
 
 /*
  * To change this license header, choose License Headers in Project Properties.
@@ -22,6 +34,12 @@ public class ProbeGUI extends javax.swing.JFrame {
     
     private Communicator communicator;
     
+    private ComboItem selectedCommand;
+    private ComboItem selectedArgument;
+    
+    private ProbeUsbCommander probeCommander = new ProbeUsbCommander();
+    
+    
     public void setCommunicator(Communicator communicator) {
         this.communicator = communicator;
         
@@ -36,6 +54,42 @@ public class ProbeGUI extends javax.swing.JFrame {
      */
     private ProbeGUI() {
         initComponents();
+        
+        getRootPane().setDefaultButton(sendButton);
+        
+        sendLog.setEditable(false);
+        
+        Vector modelPacketTypes = new Vector();
+        modelPacketTypes.addElement( new ComboItem(ProbeUsbCommander.writeConfigFirstByte, "writeConfig" ) );
+        modelPacketTypes.addElement( new ComboItem(ProbeUsbCommander.readConfigFirstByte, "readConfig" ) );
+        modelPacketTypes.addElement( new ComboItem(ProbeUsbCommander.accRegWriteFirstByte, "accRegWrite" ) );
+        modelPacketTypes.addElement( new ComboItem(ProbeUsbCommander.accRegReadFirstByte, "accRegRead" ) );
+        modelPacketTypes.addElement( new ComboItem(ProbeUsbCommander.setTimeHiFirstByte, "setTime" ) );
+
+        cboxCommand.setModel(new DefaultComboBoxModel(modelPacketTypes));
+        
+        Vector modelArgumentTypes = new Vector();
+        
+        modelArgumentTypes.addElement( new ComboItem(ConfigParamType.selective_recording_mode.index, "selective_recording_mode" ) );
+        modelArgumentTypes.addElement( new ComboItem(ConfigParamType.streaming_mode.index, "streaming_mode" ) );
+        modelArgumentTypes.addElement( new ComboItem(ConfigParamType.use_bt_with_usb.index, "use_bt_with_usb" ) );
+        modelArgumentTypes.addElement( new ComboItem(ConfigParamType.snooze_detection_time.index, "snooze_detection_time" ) );
+        modelArgumentTypes.addElement( new ComboItem(ConfigParamType.snooze_threshold_acceleration.index, "snooze_threshold_acceleration" ) );
+        modelArgumentTypes.addElement( new ComboItem(ConfigParamType.activation_threshold_acceleration.index, "activation_threshold_acceleration" ) );
+        modelArgumentTypes.addElement( new ComboItem(ConfigParamType.sleep_detection_time.index, "sleep_detection_time" ) );
+        modelArgumentTypes.addElement( new ComboItem(ConfigParamType.sleep_threshold_acceleration.index, "sleep_threshold_acceleration" ) );
+        modelArgumentTypes.addElement( new ComboItem(ConfigParamType.shock_threshold_acceleration.index, "shock_threshold_acceleration" ) );
+        modelArgumentTypes.addElement( new ComboItem(ConfigParamType.rest_threshold_acceleration.index, "rest_threshold_acceleration" ) );
+        modelArgumentTypes.addElement( new ComboItem(ConfigParamType.rest_detection_time.index, "rest_detection_time" ) );
+        modelArgumentTypes.addElement( new ComboItem(ConfigParamType.accelerometer_status_reg.index, "accelerometer_status_reg" ) );
+        modelArgumentTypes.addElement( new ComboItem(ConfigParamType.vcc_voltage.index, "vcc_voltage" ) );
+        modelArgumentTypes.addElement( new ComboItem(ConfigParamType.vcc_nominal_voltage.index, "vcc_nominal_voltage" ) );
+        modelArgumentTypes.addElement( new ComboItem(ConfigParamType.charging_status.index, "charging_status" ) );
+        
+        cboxArgumentType.setModel(new DefaultComboBoxModel(modelArgumentTypes));
+        
+        selectedCommand = (ComboItem)cboxCommand.getSelectedItem();
+        selectedArgument = (ComboItem)cboxArgumentType.getSelectedItem();
     }
 
     /**
@@ -52,13 +106,13 @@ public class ProbeGUI extends javax.swing.JFrame {
         cboxPorts = new javax.swing.JComboBox<>();
         jLabel1 = new javax.swing.JLabel();
         jLabel2 = new javax.swing.JLabel();
-        jComboBox2 = new javax.swing.JComboBox<>();
+        cboxCommand = new javax.swing.JComboBox<>();
         jLabel3 = new javax.swing.JLabel();
         sendButton = new javax.swing.JButton();
         jScrollPane2 = new javax.swing.JScrollPane();
         sendLog = new javax.swing.JTextArea();
         jLabel4 = new javax.swing.JLabel();
-        jComboBox3 = new javax.swing.JComboBox<>();
+        cboxArgumentType = new javax.swing.JComboBox<>();
         txtCommandArg = new javax.swing.JTextField();
         jLabel5 = new javax.swing.JLabel();
 
@@ -78,7 +132,11 @@ public class ProbeGUI extends javax.swing.JFrame {
 
         jLabel2.setText("Команда");
 
-        jComboBox2.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "writeConfig", "readConfig", "accRegWrite", "accRegRead", "setTime" }));
+        cboxCommand.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                cboxCommandActionPerformed(evt);
+            }
+        });
 
         jLabel3.setText("Тип аргумента");
 
@@ -95,10 +153,9 @@ public class ProbeGUI extends javax.swing.JFrame {
 
         jLabel4.setText("Лог отправки");
 
-        jComboBox3.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "acc_odr", "selective_recording_mode", "streaming_mode", "use_bt_with_usb", "snooze_detection_time", "snooze_threshold_acceleration", "activation_threshold_acceleration", "sleep_detection_time", "sleep_threshold_acceleration", "shock_threshold_acceleration", "rest_threshold_acceleration", "rest_detection_time", "accelerometer_status_reg", "vcc_voltage", "vcc_nominal_voltage", "charging_status" }));
-        jComboBox3.addActionListener(new java.awt.event.ActionListener() {
+        cboxArgumentType.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
-                jComboBox3ActionPerformed(evt);
+                cboxArgumentTypeActionPerformed(evt);
             }
         });
 
@@ -116,26 +173,25 @@ public class ProbeGUI extends javax.swing.JFrame {
                         .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                             .addComponent(jLabel4)
                             .addGroup(layout.createSequentialGroup()
-                                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING, false)
                                     .addGroup(layout.createSequentialGroup()
-                                        .addComponent(jComboBox2, javax.swing.GroupLayout.PREFERRED_SIZE, 233, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                        .addGap(18, 18, 18)
-                                        .addComponent(jComboBox3, javax.swing.GroupLayout.PREFERRED_SIZE, 182, javax.swing.GroupLayout.PREFERRED_SIZE))
-                                    .addGroup(layout.createSequentialGroup()
-                                        .addComponent(jLabel2)
-                                        .addGap(208, 208, 208)
-                                        .addComponent(jLabel3)))
+                                        .addComponent(jLabel1, javax.swing.GroupLayout.PREFERRED_SIZE, 87, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                                        .addComponent(cboxPorts, 0, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                                    .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                                        .addComponent(cboxCommand, javax.swing.GroupLayout.PREFERRED_SIZE, 233, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                        .addComponent(jLabel2)))
                                 .addGap(18, 18, 18)
                                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                                    .addComponent(jLabel5)
+                                    .addComponent(jLabel3)
+                                    .addComponent(cboxArgumentType, javax.swing.GroupLayout.PREFERRED_SIZE, 244, javax.swing.GroupLayout.PREFERRED_SIZE))
+                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
+                                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                                     .addGroup(layout.createSequentialGroup()
-                                        .addComponent(txtCommandArg, javax.swing.GroupLayout.PREFERRED_SIZE, 303, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                        .addComponent(txtCommandArg, javax.swing.GroupLayout.PREFERRED_SIZE, 241, javax.swing.GroupLayout.PREFERRED_SIZE)
                                         .addGap(18, 18, 18)
-                                        .addComponent(sendButton))))
-                            .addGroup(layout.createSequentialGroup()
-                                .addComponent(jLabel1, javax.swing.GroupLayout.PREFERRED_SIZE, 87, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                                .addComponent(cboxPorts, javax.swing.GroupLayout.PREFERRED_SIZE, 142, javax.swing.GroupLayout.PREFERRED_SIZE)))
+                                        .addComponent(sendButton))
+                                    .addComponent(jLabel5))))
                         .addGap(0, 0, Short.MAX_VALUE)))
                 .addContainerGap())
         );
@@ -153,9 +209,9 @@ public class ProbeGUI extends javax.swing.JFrame {
                     .addComponent(jLabel5))
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                    .addComponent(jComboBox2, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(cboxCommand, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
                     .addComponent(sendButton)
-                    .addComponent(jComboBox3, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(cboxArgumentType, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
                     .addComponent(txtCommandArg, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
                 .addGap(18, 18, 18)
                 .addComponent(jLabel4)
@@ -169,13 +225,74 @@ public class ProbeGUI extends javax.swing.JFrame {
 
     private void sendButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_sendButtonActionPerformed
         // Отправка команды
-        String arg = txtCommandArg.getText();
-        communicator.writeData(arg.getBytes());
+        String argval = txtCommandArg.getText();
+                    
+        switch(selectedCommand.getVal()) {
+            case ProbeUsbCommander.accRegReadFirstByte:
+                int regAdress = Integer.parseInt(argval);
+                probeCommander.deviceAccRegRead(regAdress);
+                break;
+            case ProbeUsbCommander.accRegWriteFirstByte:
+                String[] values = argval.split(" ");
+                regAdress = Integer.parseInt(values[0]);
+                int regValue = Integer.parseInt(values[1]);
+                probeCommander.deviceAccRegWrite(regAdress, regValue);
+                break;
+            case ProbeUsbCommander.readConfigFirstByte:
+                ConfigParamType selected = selectedParamType();
+                probeCommander.deviceReadConfig(selected);
+                break;
+            case ProbeUsbCommander.setTimeHiFirstByte:
+                DateFormat df = new SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.ENGLISH);
+                try {
+                    Date result =  df.parse(argval); 
+                    probeCommander.deviceSetTime(result);
+                }
+                catch (ParseException ex) {
+                    addErrorLine("Неверный формат даты");
+                }
+                break;
+            case ProbeUsbCommander.writeConfigFirstByte:
+                selected = selectedParamType();
+                probeCommander.deviceWriteConfig(selected, (Object)argval);
+                break;
+        }
+        
+        int output;
+        String line = "";
+        byte [] bytes = new byte[4];
+        int index = 0;
+        
+        while((output = probeCommander.popOutputByte()) != -1) {
+           line += Integer.toHexString(output) + " ";
+           bytes[index] = (byte)output;
+           index += 1;
+        }
+        
+        if(line.length() > 0) {
+            communicator.writeData(bytes);
+            addNormalLine(line);
+        }
     }//GEN-LAST:event_sendButtonActionPerformed
 
-    private void jComboBox3ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jComboBox3ActionPerformed
-        // TODO add your handling code here:
-    }//GEN-LAST:event_jComboBox3ActionPerformed
+    private  ConfigParamType selectedParamType() {
+        ConfigParamType cptype = ConfigParamType.acc_odr;
+                
+        for (ConfigParamType nextType : ConfigParamType.values()) {
+            if(selectedArgument.getVal() == nextType.index) {
+                cptype = nextType;
+                break;
+            }
+        }
+
+        return cptype;
+    }
+    
+    private void cboxArgumentTypeActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_cboxArgumentTypeActionPerformed
+        // Изменен тип аргумента
+        JComboBox comboBox = (JComboBox)evt.getSource();
+        selectedArgument = (ComboItem)comboBox.getSelectedItem();
+    }//GEN-LAST:event_cboxArgumentTypeActionPerformed
 
     private void cboxPortsActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_cboxPortsActionPerformed
         // Выбран порт, пробуем подключиться к нему
@@ -187,7 +304,7 @@ public class ProbeGUI extends javax.swing.JFrame {
         int result = communicator.connect(port);
         
         if(Communicator.CONNECTION_OK == result) {
-            addOKLine("Connection OK");
+            addNormalLine("Connection OK");
         }
         else if(Communicator.CONNECTION_FAILED == result) {
             addErrorLine("FAILED to open " + port);
@@ -205,18 +322,24 @@ public class ProbeGUI extends javax.swing.JFrame {
         }
     }//GEN-LAST:event_cboxPortsActionPerformed
 
-    private void addOKLine(String line) {
-        sendLog.setForeground(Color.GREEN);
-        sendLog.append(line + "\n");        
-    }
-    
+    private void cboxCommandActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_cboxCommandActionPerformed
+        // Измененен тип сообщения
+        JComboBox comboBox = (JComboBox)evt.getSource();
+        selectedCommand = (ComboItem)comboBox.getSelectedItem();
+        
+        if(selectedCommand.getVal() != ProbeUsbCommander.writeConfigFirstByte && selectedCommand.getVal() != ProbeUsbCommander.readConfigFirstByte) {
+            cboxArgumentType.setEnabled(false);
+        }
+        else {
+            cboxArgumentType.setEnabled(true);
+        }
+    }//GEN-LAST:event_cboxCommandActionPerformed
+
     private void addErrorLine(String line) {
-        sendLog.setForeground(Color.RED);
-        sendLog.append(line + "\n");        
+        sendLog.append("ERROR : " + line + "\n");        
     }
     
     private void addNormalLine(String line) {
-        sendLog.setForeground(Color.BLACK);
         sendLog.append(line + "\n");        
     }    
     
@@ -258,9 +381,9 @@ public class ProbeGUI extends javax.swing.JFrame {
     }
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
+    private javax.swing.JComboBox<String> cboxArgumentType;
+    private javax.swing.JComboBox<String> cboxCommand;
     private javax.swing.JComboBox<String> cboxPorts;
-    private javax.swing.JComboBox<String> jComboBox2;
-    private javax.swing.JComboBox<String> jComboBox3;
     private javax.swing.JLabel jLabel1;
     private javax.swing.JLabel jLabel2;
     private javax.swing.JLabel jLabel3;
@@ -273,4 +396,28 @@ public class ProbeGUI extends javax.swing.JFrame {
     private javax.swing.JTextArea sendLog;
     private javax.swing.JTextField txtCommandArg;
     // End of variables declaration//GEN-END:variables
+}
+
+class ComboItem {
+
+  private int val;
+  private String description;
+
+  public ComboItem(int id, String description) {
+    this.val = id;
+    this.description = description;
+  }
+
+  public int getVal() {
+    return val;
+  }
+
+  public String getDescription() {
+    return description;
+  }
+
+  @Override
+  public String toString() {
+    return description;
+  }
 }

@@ -139,8 +139,7 @@ public class Communicator implements SerialPortEventListener
         }
         catch (IOException e) {
             logText = "I/O Streams failed to open. (" + e.toString() + ")";
-            //window.txtLog.setForeground(Color.red);
-            //window.txtLog.append(logText + "\n");
+            writeLineToLog(logText);
             return successful;
         }
     }
@@ -158,8 +157,7 @@ public class Communicator implements SerialPortEventListener
         catch (TooManyListenersException e)
         {
             logText = "Too many listeners. (" + e.toString() + ")";
-            //window.txtLog.setForeground(Color.red);
-            //window.txtLog.append(logText + "\n");
+            writeLineToLog(logText);
         }
     }
 
@@ -202,7 +200,7 @@ public class Communicator implements SerialPortEventListener
             try
             {
                 byte singleData = (byte)input.read();
-                logText = new String(new byte[] {singleData});
+                logText = Integer.toHexString(singleData);
                 writeLineToLog(logText);
             }
             catch (Exception e)
@@ -223,6 +221,14 @@ public class Communicator implements SerialPortEventListener
         
         try
         {
+            String toLog = "Отправлено : ";
+            
+            for(byte next: data) {
+                toLog += Integer.toHexString(next) + " ";
+            }
+            
+            writeLineToLog(toLog);
+            
             output.write(data);
             output.flush();
         }
