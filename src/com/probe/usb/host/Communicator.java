@@ -22,6 +22,11 @@ import java.util.TooManyListenersException;
 
 public class Communicator implements SerialPortEventListener
 {
+    public interface Receiver
+    {
+        public void handle(byte data);
+    }
+    
     final static int CONNECTION_OK = 1;
     final static int CONNECTION_FAILED = 2;
     final static int CONNECTION_CONNECTED = 3;
@@ -55,6 +60,12 @@ public class Communicator implements SerialPortEventListener
     //a string for recording what goes on in the program
     private String logText = "";
     private String logFileName = "log.txt";
+    
+    private Receiver receiver;
+    
+    public void setReceiver(Receiver receiver) {
+        this.receiver = receiver;
+    }
 
     //search for all the serial ports
     //pre: none
@@ -202,6 +213,9 @@ public class Communicator implements SerialPortEventListener
                 byte singleData = (byte)input.read();
                 logText = Integer.toHexString(singleData);
                 writeLineToLog(logText);
+                
+                if(receiver != null)
+                    receiver.handle(singleData);
             }
             catch (Exception e)
             {

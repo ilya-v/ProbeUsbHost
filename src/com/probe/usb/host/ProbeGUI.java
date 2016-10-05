@@ -2,9 +2,13 @@ package com.probe.usb.host;
 
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Cursor;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -15,6 +19,9 @@ import java.util.Iterator;
 import java.util.Locale;
 import java.util.TreeSet;
 import java.util.Vector;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.util.prefs.Preferences;
 import javax.swing.ComboBoxModel;
 import javax.swing.DefaultComboBoxModel;
 import javax.swing.JCheckBox;
@@ -33,7 +40,7 @@ import javax.swing.plaf.basic.BasicComboBoxRenderer;
  *
  * @author chernov
  */
-public class ProbeGUI extends javax.swing.JFrame {
+public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receiver{
 
     public static ProbeGUI instance;
     
@@ -43,17 +50,27 @@ public class ProbeGUI extends javax.swing.JFrame {
     private ComboItem selectedArgument;
     
     private ProbeUsbCommander probeCommander = new ProbeUsbCommander();
+    private Parser parser = new Parser();
     
     private boolean dataFromFile = false;
+    
+    private final String PREF_OUTPUTDIR_NAME = "preference_outputdir";
+    
+    private String outputDirectory;
     
     
     public void setCommunicator(Communicator communicator) {
         this.communicator = communicator;
+        this.communicator.setReceiver(this);
         
         HashMap ports = this.communicator.getAvailableComPorts();
         for (Object key : new TreeSet(ports.keySet())) {
             cboxPorts.addItem((String)key);
         }
+    }
+    
+    public void handle(byte data) {
+        parser.addByte(data);
     }
     
     /**
@@ -65,6 +82,9 @@ public class ProbeGUI extends javax.swing.JFrame {
         getRootPane().setDefaultButton(sendButton);
         
         sendLog.setEditable(false);
+        
+        outputDirectory = getOutputDirectory();
+        outputDirDisplay.setText(outputDirectory);
         
         Vector modelPacketTypes = new Vector();
         modelPacketTypes.addElement( new ComboItem(ProbeUsbCommander.writeConfigFirstByte, "writeConfig" ) );
@@ -102,6 +122,11 @@ public class ProbeGUI extends javax.swing.JFrame {
             public void windowClosing(WindowEvent e){
                 if(communicator.isConnected())
                     communicator.disconnect();
+                
+                String result = parser.getResult();
+                
+                if(result.length() > 0)
+                    writeNewFileToOutputDirectory(result);
             }
         });
     }
@@ -132,8 +157,8 @@ public class ProbeGUI extends javax.swing.JFrame {
         jCheckBox1 = new javax.swing.JCheckBox();
         datafileButton = new javax.swing.JButton();
         jLabel6 = new javax.swing.JLabel();
-        jButton1 = new javax.swing.JButton();
-        jTextField1 = new javax.swing.JTextField();
+        outputdirButton = new javax.swing.JButton();
+        outputDirDisplay = new javax.swing.JTextField();
 
         jTextArea1.setColumns(20);
         jTextArea1.setRows(5);
@@ -197,7 +222,14 @@ public class ProbeGUI extends javax.swing.JFrame {
 
         jLabel6.setText("Папка для сохранения файлов : ");
 
-        jButton1.setText("Выбрать ...");
+        outputdirButton.setText("Выбрать ...");
+        outputdirButton.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                outputdirButtonActionPerformed(evt);
+            }
+        });
+
+        outputDirDisplay.setEditable(false);
 
         javax.swing.GroupLayout layout = new javax.swing.GroupLayout(getContentPane());
         getContentPane().setLayout(layout);
@@ -216,14 +248,8 @@ public class ProbeGUI extends javax.swing.JFrame {
                             .addGroup(layout.createSequentialGroup()
                                 .addComponent(jLabel2)
                                 .addGap(171, 171, 171)))
-                        .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING)
-                            .addGroup(layout.createSequentialGroup()
-                                .addGap(18, 18, 18)
-                                .addComponent(jLabel3)
-                                .addGap(0, 0, Short.MAX_VALUE))
-                            .addGroup(layout.createSequentialGroup()
-                                .addGap(0, 0, Short.MAX_VALUE)
-                                .addComponent(datafileButton))))
+                        .addGap(0, 0, Short.MAX_VALUE)
+                        .addComponent(datafileButton))
                     .addGroup(layout.createSequentialGroup()
                         .addComponent(jLabel4)
                         .addGap(0, 0, Short.MAX_VALUE))
@@ -232,11 +258,13 @@ public class ProbeGUI extends javax.swing.JFrame {
                             .addGroup(layout.createSequentialGroup()
                                 .addComponent(jLabel6)
                                 .addGap(24, 24, 24)
-                                .addComponent(jTextField1))
+                                .addComponent(outputDirDisplay))
                             .addGroup(layout.createSequentialGroup()
                                 .addComponent(cboxCommand, javax.swing.GroupLayout.PREFERRED_SIZE, 233, javax.swing.GroupLayout.PREFERRED_SIZE)
                                 .addGap(18, 18, 18)
-                                .addComponent(cboxArgumentType, javax.swing.GroupLayout.PREFERRED_SIZE, 244, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                                    .addComponent(cboxArgumentType, javax.swing.GroupLayout.PREFERRED_SIZE, 244, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                    .addComponent(jLabel3))
                                 .addGap(18, 18, 18)
                                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                                     .addComponent(jCheckBox1, javax.swing.GroupLayout.PREFERRED_SIZE, 150, javax.swing.GroupLayout.PREFERRED_SIZE)
@@ -245,7 +273,7 @@ public class ProbeGUI extends javax.swing.JFrame {
                         .addGap(18, 18, 18)
                         .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
                             .addComponent(sendButton, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                            .addComponent(jButton1, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))))
+                            .addComponent(outputdirButton, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))))
                 .addContainerGap())
         );
         layout.setVerticalGroup(
@@ -263,20 +291,21 @@ public class ProbeGUI extends javax.swing.JFrame {
                     .addComponent(jLabel3)
                     .addComponent(jLabel5, javax.swing.GroupLayout.PREFERRED_SIZE, 15, javax.swing.GroupLayout.PREFERRED_SIZE))
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
-                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                    .addComponent(cboxCommand, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addComponent(cboxArgumentType, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addComponent(sendButton)
-                    .addComponent(txtCommandArg))
+                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addComponent(txtCommandArg, javax.swing.GroupLayout.Alignment.TRAILING, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                        .addComponent(cboxCommand, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addComponent(cboxArgumentType, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addComponent(sendButton)))
                 .addGap(27, 27, 27)
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                     .addComponent(jLabel6)
-                    .addComponent(jButton1)
-                    .addComponent(jTextField1, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
+                    .addComponent(outputdirButton)
+                    .addComponent(outputDirDisplay, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
                 .addComponent(jLabel4)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(jScrollPane2, javax.swing.GroupLayout.PREFERRED_SIZE, 368, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addComponent(jScrollPane2, javax.swing.GroupLayout.DEFAULT_SIZE, 401, Short.MAX_VALUE)
                 .addContainerGap())
         );
 
@@ -396,11 +425,16 @@ public class ProbeGUI extends javax.swing.JFrame {
     }//GEN-LAST:event_cboxCommandActionPerformed
 
     private void jCheckBox1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jCheckBox1ActionPerformed
-        
         dataFromFile = ((JCheckBox)evt.getSource()).isSelected();
+        
+        writeNewFileToOutputDirectory(parser.getResult());
+        parser.result = "";
         
         datafileButton.setEnabled(dataFromFile);
         cboxPorts.setEnabled(!dataFromFile);
+        cboxCommand.setEnabled(!dataFromFile);
+        cboxArgumentType.setEnabled(!dataFromFile);
+        txtCommandArg.setEnabled(!dataFromFile);
     }//GEN-LAST:event_jCheckBox1ActionPerformed
 
     private void datafileButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_datafileButtonActionPerformed
@@ -410,8 +444,58 @@ public class ProbeGUI extends javax.swing.JFrame {
 
         if (returnVal == JFileChooser.APPROVE_OPTION) {
             File file = fc.getSelectedFile();
+            byte [] fileData;
+            
+            try {
+                fileData = Files.readAllBytes(file.toPath());
+            } catch (IOException ex) {
+                Logger.getLogger(ProbeGUI.class.getName()).log(Level.SEVERE, null, ex);
+                return;
+            }
+            
+            setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+            parser.result = "";
+            for (int b: fileData) {
+                parser.addByte(b);
+            }
+            
+            // Записать результат парсинга в файл
+            writeNewFileToOutputDirectory(parser.getResult());
+            setCursor(Cursor.getDefaultCursor());
         }
     }//GEN-LAST:event_datafileButtonActionPerformed
+
+    private void writeNewFileToOutputDirectory(String data) {
+        String dirName = outputDirectory;
+        String fileName = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss").format(new Date());;
+        File dir  = new File (dirName);
+        File actualFile = new File (dir, fileName);
+        
+        FileWriter fw;
+        try {
+            if(!actualFile.exists())
+                actualFile.createNewFile();
+
+            fw = new FileWriter(actualFile);
+            fw.write(data);
+            fw.close();
+        } catch (IOException ex) {
+            Logger.getLogger(ProbeGUI.class.getName()).log(Level.SEVERE, null, ex);
+        }
+    }
+    
+    private void outputdirButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_outputdirButtonActionPerformed
+        final JFileChooser fc = new JFileChooser();
+        fc.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        int returnVal = fc.showSaveDialog(ProbeGUI.this);
+
+        if (returnVal == JFileChooser.APPROVE_OPTION) {
+            File folder = fc.getSelectedFile();
+            outputDirectory = folder.getPath().toString();
+            outputDirDisplay.setText(outputDirectory);
+            saveOutputDirectory(outputDirectory);
+        }
+    }//GEN-LAST:event_outputdirButtonActionPerformed
 
     private void addErrorLine(String line) {
         sendLog.append("ERROR : " + line + "\n");        
@@ -419,7 +503,18 @@ public class ProbeGUI extends javax.swing.JFrame {
     
     private void addNormalLine(String line) {
         sendLog.append(line + "\n");        
-    }    
+    }
+
+    private String getOutputDirectory() {
+        Preferences prefs = Preferences.userNodeForPackage(com.probe.usb.host.ProbeGUI.class);
+        String defaultValue = System.getProperty("user.home");;
+        return prefs.get(PREF_OUTPUTDIR_NAME, defaultValue);
+    }
+    
+    private void saveOutputDirectory(String outputDirectory) {
+        Preferences prefs = Preferences.userNodeForPackage(com.probe.usb.host.ProbeGUI.class);
+        prefs.put(PREF_OUTPUTDIR_NAME, outputDirectory);
+    }
     
     /**
      * @param args the command line arguments
@@ -463,7 +558,6 @@ public class ProbeGUI extends javax.swing.JFrame {
     private javax.swing.JComboBox<String> cboxCommand;
     private javax.swing.JComboBox<String> cboxPorts;
     private javax.swing.JButton datafileButton;
-    private javax.swing.JButton jButton1;
     private javax.swing.JCheckBox jCheckBox1;
     private javax.swing.JLabel jLabel1;
     private javax.swing.JLabel jLabel2;
@@ -474,7 +568,8 @@ public class ProbeGUI extends javax.swing.JFrame {
     private javax.swing.JScrollPane jScrollPane1;
     private javax.swing.JScrollPane jScrollPane2;
     private javax.swing.JTextArea jTextArea1;
-    private javax.swing.JTextField jTextField1;
+    private javax.swing.JTextField outputDirDisplay;
+    private javax.swing.JButton outputdirButton;
     private javax.swing.JButton sendButton;
     private javax.swing.JTextArea sendLog;
     private javax.swing.JTextField txtCommandArg;
@@ -504,3 +599,46 @@ class ComboItem {
     return description;
   }
 }
+
+class Parser extends ProbeUsbParser {
+
+    static String bin(final int b) {
+        StringBuilder sb = new StringBuilder("0b");
+        for (int i = 7; i >= 0; i--)
+            sb.append( ((1<<i) & b & 0xFF) != 0? "1" : "0");
+        return sb.toString();
+    }
+
+    static String hbin(final int b) {
+        final String s = bin(b);
+        return s.substring(0, 6) + "[" + s.substring(6) + "]";
+    }
+
+    String result = "";
+    String getResult() { final String r = result; result = ""; return r; }
+
+    protected void onNewByte(final int b)                      { result += "B " + bin(b) + "\n"; }
+    protected void onSync(final int[] bytes, final int nBytesInSync) { result += "Sync: " + bytes.length + " bytes, " + nBytesInSync + " total\n"; }
+    protected void onNewFrame(final int b1, final int b2)      {
+        result += "F " + bin(b1) + " " + bin(b2) + ":  ";
+
+
+        int index = 0;
+        for (int b: bytes) {
+            result += (index % 2 == 0 ? hbin(b) : bin(b)) + " ";
+            index ++;
+        }
+        result += "\n";
+    }
+    protected void onNewDataPacket(final int[] d)              { result += "D " + bin(d[0]) + bin(d[1]) + bin(d[2]) + bin(d[3]) + "\n"; }
+    protected void onNewTimePacket(final int[] d)              { result += "T " + bin(d[0]) + bin(d[1]) + bin(d[2]) + bin(d[3]) + "\n"; }
+    protected void onNewSingleFrame(final int b1, final int b2){ result += "S " + bin(b1) + " " + bin(b2) + "\n"; }
+    protected void onDropByte(final int b)                     { result += "- " + bin(b) + "\n"; }
+    protected void onExpectNewPacket(final ProbeUsbParser.FramePacket p)      { result += "==NewPacket==" + p.length() + "\n";}
+    protected void onPacketDataByte(final ProbeUsbParser.FramePacket p)       { 
+        result += "== FB [" + p.length() + "] ";
+        for (int i = 0; i < p.getFrameIdxInPacket(); i++)
+            result += bin(p.getPacketByte(i)) + " ";
+        result += "\n";
+    }
+};
