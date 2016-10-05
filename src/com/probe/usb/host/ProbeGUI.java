@@ -435,6 +435,7 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
         cboxCommand.setEnabled(!dataFromFile);
         cboxArgumentType.setEnabled(!dataFromFile);
         txtCommandArg.setEnabled(!dataFromFile);
+        sendButton.setEnabled(!dataFromFile);
     }//GEN-LAST:event_jCheckBox1ActionPerformed
 
     private void datafileButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_datafileButtonActionPerformed
