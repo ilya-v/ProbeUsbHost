@@ -3,12 +3,11 @@ package com.probe.usb.test;
 import com.probe.usb.host.parser.ProbeUsbParser;
 import com.probe.usb.host.parser.TablePacketProcessor;
 import com.probe.usb.host.parser.internal.*;
-import org.apache.commons.io.FileUtils;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -122,8 +121,15 @@ public class ProbeUsbParserTest {
     }
 
     protected byte[] getCapture() throws IOException {
-        File captureFile = new File(this.getClass().getResource("/cap18.bin").getFile());
-        return FileUtils.readFileToByteArray(captureFile);
+        final String capturePath = "/cap18.bin";
+        InputStream input = this.getClass().getResourceAsStream(capturePath);
+        final int nBytes = this.getClass().getResource(capturePath).getFile().length();
+        byte[] bytes = new byte[nBytes];
+
+        for (int i = 0, b = 0; (b = input.read()) != -1; i++)
+            bytes[i] = (byte)b;
+
+        return bytes;
     }
 
     protected List<Frame> getFrames(FrameDetector fd, byte[] segment) {

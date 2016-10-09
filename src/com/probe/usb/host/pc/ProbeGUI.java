@@ -4,7 +4,6 @@ import com.probe.usb.host.commander.ConfigParamType;
 import com.probe.usb.host.commander.ProbeUsbCommander;
 import com.probe.usb.host.parser.ProbeUsbParser;
 import com.probe.usb.host.parser.TablePacketProcessor;
-import org.apache.commons.lang.ArrayUtils;
 
 import java.awt.Cursor;
 import java.awt.event.WindowAdapter;
@@ -359,8 +358,11 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
         }
         
         if(bytes.size() > 0 && bytes.size() % 4 == 0) {
+            byte[] arrBytes = new byte[bytes.size()];
+            for (int i =0; i < arrBytes.length; i++)
+                arrBytes[i] = bytes.get(i);
             if (communicator != null)
-                communicator.writeData(ArrayUtils.toPrimitive(bytes.toArray(new Byte[bytes.size()])));
+                communicator.writeData(arrBytes);
             addNormalLine(line);
         }
         else if (bytes.size() > 0){
