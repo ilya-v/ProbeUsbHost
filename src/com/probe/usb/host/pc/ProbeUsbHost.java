@@ -3,11 +3,10 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package com.probe.usb.host;
+package com.probe.usb.host.pc;
 
-import gnu.io.CommPortIdentifier;
-import java.util.Enumeration;
-import java.util.HashMap;
+import com.probe.usb.host.pc.Communicator;
+import com.probe.usb.host.pc.ProbeGUI;
 
 /**
  *

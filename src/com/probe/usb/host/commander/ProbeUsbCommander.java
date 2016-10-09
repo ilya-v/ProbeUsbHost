@@ -1,11 +1,13 @@
-package com.probe.usb.host;
+package com.probe.usb.host.commander;
 
 import java.util.List;
 import java.util.Date;
 import java.util.ArrayList;
 
+import static com.probe.usb.host.commander.ConfigCommand.*;
 
-class ProbeUsbCommander
+
+public class ProbeUsbCommander
 {
     protected List<Short> bytes = new ArrayList<Short>(); 
     
@@ -25,14 +27,7 @@ class ProbeUsbCommander
     static protected short nthByte(final long val, final int idx) {
         return (short)( (val >>> (idx * 8)) & 0xFF );
     }
-   
-    static final short
-        writeConfigFirstByte      = 0xF1,
-        readConfigFirstByte       = 0xF2,
-        accRegWriteFirstByte      = 0xF3,
-        accRegReadFirstByte       = 0xF4,
-        setTimeHiFirstByte        = 0xF5,
-        setTimeLoFirstByte        = 0xF6;
+
         
     protected void bytesToDevice(final short b1, final short b2, final short b3, final short b4) {
         for (short b: new short[] {b1, b2, b3, b4})
@@ -44,25 +39,25 @@ class ProbeUsbCommander
         bytesToDevice(firstByte, (short)paramType.index, (short)(intValue / 256), (short)(intValue % 256));
     }
     
-    protected void deviceWriteConfig(final ConfigParamType paramType, final Object value) {
-        deviceCommand(writeConfigFirstByte, paramType, value);
+    public void deviceWriteConfig(final ConfigParamType paramType, final Object value) {
+        deviceCommand(writeConfig.getFirstByte(), paramType, value);
     }
     
-    protected void deviceReadConfig(final ConfigParamType paramType) {
-        deviceCommand(readConfigFirstByte, paramType, 0);
+    public void deviceReadConfig(final ConfigParamType paramType) {
+        deviceCommand(readConfig.getFirstByte(), paramType, 0);
     }
     
-    protected void deviceAccRegWrite(final int regAddress, final int regValue) {
-        bytesToDevice(accRegWriteFirstByte, (short)regAddress, (short)0, (short)regValue );
+    public void deviceAccRegWrite(final int regAddress, final int regValue) {
+        bytesToDevice(accRegWrite.getFirstByte(), (short)regAddress, (short)0, (short)regValue );
     }
     
-    protected void deviceAccRegRead(final int regAddress) {
-        bytesToDevice(accRegReadFirstByte, (short)regAddress, (short)0, (short)0);
+    public void deviceAccRegRead(final int regAddress) {
+        bytesToDevice(accRegRead.getFirstByte(), (short)regAddress, (short)0, (short)0);
     }
     
-    protected void deviceSetTime(Date datetime) {
+    public void deviceSetTime(Date datetime) {
         final long unixTime = datetime.getTime() / 1000;
-        bytesToDevice(setTimeHiFirstByte, (short)0, nthByte(unixTime, 3), nthByte(unixTime, 2));
-        bytesToDevice(setTimeLoFirstByte, (short)0, nthByte(unixTime, 1), nthByte(unixTime, 0));
+        bytesToDevice(setTimeHi.getFirstByte(), (short)0, nthByte(unixTime, 3), nthByte(unixTime, 2));
+        bytesToDevice(setTimeLo.getFirstByte(), (short)0, nthByte(unixTime, 1), nthByte(unixTime, 0));
     }
 }

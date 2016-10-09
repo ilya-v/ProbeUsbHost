@@ -1,7 +1,11 @@
-package com.probe.usb.host;
+package com.probe.usb.host.pc;
 
-import java.awt.Color;
-import java.awt.Component;
+import com.probe.usb.host.commander.ConfigParamType;
+import com.probe.usb.host.commander.ProbeUsbCommander;
+import com.probe.usb.host.parser.ProbeUsbParser;
+import com.probe.usb.host.parser.TablePacketProcessor;
+import org.apache.commons.lang.ArrayUtils;
+
 import java.awt.Cursor;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
@@ -12,23 +16,16 @@ import java.nio.file.Files;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.Enumeration;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Locale;
-import java.util.TreeSet;
-import java.util.Vector;
+import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.prefs.Preferences;
-import javax.swing.ComboBoxModel;
 import javax.swing.DefaultComboBoxModel;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JFileChooser;
-import javax.swing.JList;
-import javax.swing.plaf.basic.BasicComboBoxRenderer;
+
+import static com.probe.usb.host.commander.ConfigCommand.*;
 
 /*
  * To change this license header, choose License Headers in Project Properties.
@@ -50,13 +47,17 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
     private ComboItem selectedArgument;
     
     private ProbeUsbCommander probeCommander = new ProbeUsbCommander();
-    private Parser parser = new Parser();
-    
+
+    private TablePacketProcessor packetProcessor = new TablePacketProcessor();
+    private ProbeUsbParser parser = new ProbeUsbParser().addPacketProcessor(packetProcessor);
+
     private boolean dataFromFile = false;
     
     private final String PREF_OUTPUTDIR_NAME = "preference_outputdir";
     
     private String outputDirectory;
+
+    private Map<Integer, String> lastArguments = new HashMap<>();
     
     
     public void setCommunicator(Communicator communicator) {
@@ -87,11 +88,11 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
         outputDirDisplay.setText(outputDirectory);
         
         Vector modelPacketTypes = new Vector();
-        modelPacketTypes.addElement( new ComboItem(ProbeUsbCommander.writeConfigFirstByte, "writeConfig" ) );
-        modelPacketTypes.addElement( new ComboItem(ProbeUsbCommander.readConfigFirstByte, "readConfig" ) );
-        modelPacketTypes.addElement( new ComboItem(ProbeUsbCommander.accRegWriteFirstByte, "accRegWrite" ) );
-        modelPacketTypes.addElement( new ComboItem(ProbeUsbCommander.accRegReadFirstByte, "accRegRead" ) );
-        modelPacketTypes.addElement( new ComboItem(ProbeUsbCommander.setTimeHiFirstByte, "setTime" ) );
+        modelPacketTypes.addElement( new ComboItem(writeConfig.getFirstByte(), writeConfig.name() ) );
+        modelPacketTypes.addElement( new ComboItem(readConfig.getFirstByte(), readConfig.name()) );
+        modelPacketTypes.addElement( new ComboItem(accRegWrite.getFirstByte(), accRegWrite.name() ) );
+        modelPacketTypes.addElement( new ComboItem(accRegRead.getFirstByte(), accRegRead.name() ) );
+        modelPacketTypes.addElement( new ComboItem(setTimeHi.getFirstByte(), "setTimeHi, setTimeLo" ) );
 
         cboxCommand.setModel(new DefaultComboBoxModel(modelPacketTypes));
         
@@ -120,13 +121,10 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
         
         this.addWindowListener(new WindowAdapter(){
             public void windowClosing(WindowEvent e){
-                if(communicator.isConnected())
+                if(communicator != null && communicator.isConnected())
                     communicator.disconnect();
-                
-                String result = parser.getResult();
-                
-                if(result.length() > 0)
-                    writeNewFileToOutputDirectory(result);
+
+                writeNewFileToOutputDirectory(packetProcessor.popResult());
             }
         });
     }
@@ -305,7 +303,7 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
                 .addComponent(jLabel4)
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
-                .addComponent(jScrollPane2, javax.swing.GroupLayout.DEFAULT_SIZE, 401, Short.MAX_VALUE)
+                .addComponent(jScrollPane2, javax.swing.GroupLayout.DEFAULT_SIZE, 200, Short.MAX_VALUE)
                 .addContainerGap())
         );
 
@@ -314,53 +312,59 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
 
     private void sendButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_sendButtonActionPerformed
         // Отправка команды
-        String argval = txtCommandArg.getText();
-                    
-        switch(selectedCommand.getVal()) {
-            case ProbeUsbCommander.accRegReadFirstByte:
-                int regAdress = Integer.parseInt(argval);
-                probeCommander.deviceAccRegRead(regAdress);
-                break;
-            case ProbeUsbCommander.accRegWriteFirstByte:
-                String[] values = argval.split(" ");
-                regAdress = Integer.parseInt(values[0]);
-                int regValue = Integer.parseInt(values[1]);
-                probeCommander.deviceAccRegWrite(regAdress, regValue);
-                break;
-            case ProbeUsbCommander.readConfigFirstByte:
-                ConfigParamType selected = selectedParamType();
-                probeCommander.deviceReadConfig(selected);
-                break;
-            case ProbeUsbCommander.setTimeHiFirstByte:
-                DateFormat df = new SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.ENGLISH);
-                try {
-                    Date result =  df.parse(argval); 
-                    probeCommander.deviceSetTime(result);
-                }
-                catch (ParseException ex) {
-                    addErrorLine("Неверный формат даты");
-                }
-                break;
-            case ProbeUsbCommander.writeConfigFirstByte:
-                selected = selectedParamType();
-                probeCommander.deviceWriteConfig(selected, (Object)argval);
-                break;
+        final String argval = txtCommandArg.getText();
+        final int fb = selectedCommand.getVal();
+
+        lastArguments.put(fb, argval);
+
+        if(fb == accRegRead.getFirstByte()) {
+            int regAdress = Integer.parseInt(argval);
+            probeCommander.deviceAccRegRead(regAdress);
+        }
+        else if (fb == accRegWrite.getFirstByte()) {
+            String[] values = argval.split(" ");
+            int regAdress = Integer.parseInt(values[0]);
+            int regValue = Integer.parseInt(values[1]);
+            probeCommander.deviceAccRegWrite(regAdress, regValue);
+        }
+        else if (fb == readConfig.getFirstByte()) {
+            ConfigParamType selected = selectedParamType();
+            probeCommander.deviceReadConfig(selected);
+        }
+        else if (fb == setTimeHi.getFirstByte()) {
+            DateFormat df = new SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.ENGLISH);
+            try {
+                Date result = df.parse(argval);
+                probeCommander.deviceSetTime(result);
+            } catch (ParseException ex) {
+                addErrorLine("Неверный формат даты");
+            }
+        }
+        else if (fb == writeConfig.getFirstByte()) {
+            ConfigParamType selected = selectedParamType();
+            try {
+                probeCommander.deviceWriteConfig(selected, (Object) argval);
+            }  catch (NumberFormatException ex) {
+                addErrorLine("Неверный формат aргумента: <" + argval + ">");
+            }
         }
         
         int output;
         String line = "";
-        byte [] bytes = new byte[4];
-        int index = 0;
+        List<Byte> bytes = new ArrayList<>();
         
         while((output = probeCommander.popOutputByte()) != -1) {
-           line += Integer.toHexString(output) + " ";
-           bytes[index] = (byte)output;
-           index += 1;
+            bytes.add((byte)output);
+            line += String.format("%02X ", output);
         }
         
-        if(line.length() > 0) {
-            communicator.writeData(bytes);
+        if(bytes.size() > 0 && bytes.size() % 4 == 0) {
+            if (communicator != null)
+                communicator.writeData(ArrayUtils.toPrimitive(bytes.toArray(new Byte[bytes.size()])));
             addNormalLine(line);
+        }
+        else if (bytes.size() > 0){
+            addErrorLine(line + " cannot be sent");
         }
     }//GEN-LAST:event_sendButtonActionPerformed
 
@@ -402,9 +406,9 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
             addNormalLine(port + " is in use.");
         }
          
-        if (communicator.isConnected() == true)
+        if (communicator.isConnected())
         {
-            if (communicator.initIOStream() == true)
+            if (communicator.initIOStream())
             {
                 communicator.initListener();
             }
@@ -416,19 +420,27 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
         JComboBox comboBox = (JComboBox)evt.getSource();
         selectedCommand = (ComboItem)comboBox.getSelectedItem();
         
-        if(selectedCommand.getVal() != ProbeUsbCommander.writeConfigFirstByte && selectedCommand.getVal() != ProbeUsbCommander.readConfigFirstByte) {
+        if(selectedCommand.getVal() != writeConfig.getFirstByte() && selectedCommand.getVal() != readConfig.getFirstByte()) {
             cboxArgumentType.setEnabled(false);
         }
         else {
             cboxArgumentType.setEnabled(true);
+        }
+
+        if (selectedCommand.getVal() == setTimeHi.getFirstByte())
+        {
+            String date = new SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.ENGLISH).format(new Date());
+            txtCommandArg.setText(date);
+        }
+        else if (lastArguments.containsKey(selectedCommand.getVal())) {
+            txtCommandArg.setText(lastArguments.get(selectedCommand.getVal()));
         }
     }//GEN-LAST:event_cboxCommandActionPerformed
 
     private void jCheckBox1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jCheckBox1ActionPerformed
         dataFromFile = ((JCheckBox)evt.getSource()).isSelected();
         
-        writeNewFileToOutputDirectory(parser.getResult());
-        parser.result = "";
+        writeNewFileToOutputDirectory(packetProcessor.popResult());
         
         datafileButton.setEnabled(dataFromFile);
         cboxPorts.setEnabled(!dataFromFile);
@@ -455,29 +467,27 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
             }
             
             setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
-            parser.result = "";
             for (int b: fileData) {
                 parser.addByte(b);
             }
             
             // Записать результат парсинга в файл
-            writeNewFileToOutputDirectory(parser.getResult());
+            writeNewFileToOutputDirectory(packetProcessor.popResult());
             setCursor(Cursor.getDefaultCursor());
         }
     }//GEN-LAST:event_datafileButtonActionPerformed
 
     private void writeNewFileToOutputDirectory(String data) {
+        if (data.isEmpty())
+            return;
         String dirName = outputDirectory;
-        String fileName = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss").format(new Date());;
+        String fileName = "accel-" + new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss").format(new Date()) + ".txt";
         File dir  = new File (dirName);
         File actualFile = new File (dir, fileName);
-        
-        FileWriter fw;
-        try {
-            if(!actualFile.exists())
-                actualFile.createNewFile();
 
-            fw = new FileWriter(actualFile);
+        try {
+            actualFile.createNewFile();
+            FileWriter fw = new FileWriter(actualFile);
             fw.write(data);
             fw.close();
         } catch (IOException ex) {
@@ -492,7 +502,7 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
 
         if (returnVal == JFileChooser.APPROVE_OPTION) {
             File folder = fc.getSelectedFile();
-            outputDirectory = folder.getPath().toString();
+            outputDirectory = folder.getPath();
             outputDirDisplay.setText(outputDirectory);
             saveOutputDirectory(outputDirectory);
         }
@@ -507,13 +517,13 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
     }
 
     private String getOutputDirectory() {
-        Preferences prefs = Preferences.userNodeForPackage(com.probe.usb.host.ProbeGUI.class);
+        Preferences prefs = Preferences.userNodeForPackage(ProbeGUI.class);
         String defaultValue = System.getProperty("user.home");;
         return prefs.get(PREF_OUTPUTDIR_NAME, defaultValue);
     }
     
     private void saveOutputDirectory(String outputDirectory) {
-        Preferences prefs = Preferences.userNodeForPackage(com.probe.usb.host.ProbeGUI.class);
+        Preferences prefs = Preferences.userNodeForPackage(ProbeGUI.class);
         prefs.put(PREF_OUTPUTDIR_NAME, outputDirectory);
     }
     
@@ -579,67 +589,22 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
 
 class ComboItem {
 
-  private int val;
-  private String description;
+    private int     val;
+    private String  description;
 
-  public ComboItem(int id, String description) {
-    this.val = id;
-    this.description = description;
-  }
-
-  public int getVal() {
+    public ComboItem(int val, String description) {
+        this.val = val;
+        this.description = description;
+    }
+    public int getVal() {
     return val;
   }
-
-  public String getDescription() {
+    public String getDescription() {
     return description;
   }
 
-  @Override
-  public String toString() {
+    @Override
+    public String toString() {
     return description;
   }
 }
-
-class Parser extends ProbeUsbParser {
-
-    static String bin(final int b) {
-        StringBuilder sb = new StringBuilder("0b");
-        for (int i = 7; i >= 0; i--)
-            sb.append( ((1<<i) & b & 0xFF) != 0? "1" : "0");
-        return sb.toString();
-    }
-
-    static String hbin(final int b) {
-        final String s = bin(b);
-        return s.substring(0, 6) + "[" + s.substring(6) + "]";
-    }
-
-    String result = "";
-    String getResult() { final String r = result; result = ""; return r; }
-
-    protected void onNewByte(final int b)                      { result += "B " + bin(b) + "\n"; }
-    protected void onSync(final int[] bytes, final int nBytesInSync) { result += "Sync: " + bytes.length + " bytes, " + nBytesInSync + " total\n"; }
-    protected void onNewFrame(final int b1, final int b2)      {
-        result += "F " + bin(b1) + " " + bin(b2) + ":  ";
-
-
-        int index = 0;
-        for (int b: bytes) {
-            result += (index % 2 == 0 ? hbin(b) : bin(b)) + " ";
-            index ++;
-        }
-        result += "\n";
-    }
-    protected void onNewDataPacket(final int[] d)              { result += "D " + bin(d[0]) + bin(d[1]) + bin(d[2]) + bin(d[3]) + "\n"; }
-    protected void onNewTimePacket(final int[] d)              { result += "T " + bin(d[0]) + bin(d[1]) + bin(d[2]) + bin(d[3]) + "\n"; }
-    protected void onNewSingleFrame(final int b1, final int b2){ result += "S " + bin(b1) + " " + bin(b2) + "\n"; }
-    protected void onDropByte(final int b)                     { result += "- " + bin(b) + "\n"; }
-    protected void onExpectNewPacket(final ProbeUsbParser.FramePacket p)      { result += "==NewPacket==" + p.length() + "\n";}
-    protected void onPacketDataByte(final ProbeUsbParser.FramePacket p)       { 
-        result += "== FB [" + p.length() + "] ";
-        for (int i = 0; i < p.getFrameIdxInPacket(); i++)
-            result += bin(p.getPacketByte(i)) + " ";
-        result += "\n";
-    }
-};

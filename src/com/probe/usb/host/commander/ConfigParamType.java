@@ -1,6 +1,6 @@
-package com.probe.usb.host;
+package com.probe.usb.host.commander;
 
-enum ConfigParamType
+public enum ConfigParamType
 {  
     acc_odr                              ( 1,  1000,      true,  "Hz"),
     selective_recording_mode             ( 4,  1,         true,  "boolean"),
