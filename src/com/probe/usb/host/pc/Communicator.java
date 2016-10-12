@@ -80,7 +80,6 @@ public class Communicator implements SerialPortEventListener
             //get only serial ports
             if (curPort.getPortType() == CommPortIdentifier.PORT_SERIAL)
             {
-                //window.cboxPorts.addItem(curPort.getName());
                 portMap.put(curPort.getName(), curPort);
             }
         }
@@ -184,7 +183,6 @@ public class Communicator implements SerialPortEventListener
             input.close();
             output.close();
             bConnected = false;
-            //window.keybindingController.toggleControls();
 
             logText = "Disconnected.";
             writeLineToLog(logText);
