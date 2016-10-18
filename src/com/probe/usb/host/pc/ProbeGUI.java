@@ -25,6 +25,12 @@ import javax.swing.JComboBox;
 import javax.swing.JFileChooser;
 
 import static com.probe.usb.host.commander.ConfigCommand.*;
+import com.probe.usb.host.parser.ParserEventListener;
+import com.probe.usb.host.parser.internal.FramePacket;
+import java.awt.Color;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import javax.swing.Timer;
 
 /*
  * To change this license header, choose License Headers in Project Properties.
@@ -36,7 +42,7 @@ import static com.probe.usb.host.commander.ConfigCommand.*;
  *
  * @author chernov
  */
-public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receiver{
+public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receiver, CheckListener, StatusListener {
 
     public static ProbeGUI instance;
     
@@ -53,11 +59,24 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
     private boolean dataFromFile = false;
     
     private final String PREF_OUTPUTDIR_NAME = "preference_outputdir";
+    private final String PREF_LASTFILE_NAME = "preference_lastfile";
     
     private String outputDirectory;
 
     private Map<Integer, String> lastArguments = new HashMap<>();
     
+    private TestParserEventListener testEventListener;
+    private StatusParserEventListener statusEventListener;
+    
+    private Deque<String> portsToCheck;
+    
+    private enum ConnectionStatus {
+        Disconnected,
+        Connected,
+        Reading,
+        Data,
+        Idle
+    }
     
     public void setCommunicator(Communicator communicator) {
         this.communicator = communicator;
@@ -83,8 +102,13 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
         
         sendLog.setEditable(false);
         
+        testEventListener = new TestParserEventListener(this);
+        statusEventListener = new StatusParserEventListener(this);
+        
         outputDirectory = getOutputDirectory();
         outputDirDisplay.setText(outputDirectory);
+        
+        lastSavedFileField.setText(getLastFileName());
         
         Vector modelPacketTypes = new Vector();
         modelPacketTypes.addElement( new ComboItem(writeConfig.getFirstByte(), writeConfig.name() ) );
@@ -440,13 +464,17 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
         // Выбран порт, пробуем подключиться к нему
         String port = String.valueOf(cboxPorts.getSelectedItem());
         
-        if(communicator.isConnected())
+        if(communicator.isConnected()) {
             communicator.disconnect();
+            changeStatus(ConnectionStatus.Disconnected);
+        }
         
         int result = communicator.connect(port);
         
         if(Communicator.CONNECTION_OK == result) {
             addNormalLine("Connection OK");
+            changeStatus(ConnectionStatus.Connected);
+            parser.setListener(statusEventListener);
         }
         else if(Communicator.CONNECTION_FAILED == result) {
             addErrorLine("FAILED to open " + port);
@@ -497,6 +525,10 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
         cboxArgumentType.setEnabled(!dataFromFile);
         txtCommandArg.setEnabled(!dataFromFile);
         sendButton.setEnabled(!dataFromFile);
+        autoButton.setEnabled(!dataFromFile);
+        
+        if(!dataFromFile)
+            parser.setListener(statusEventListener);
     }//GEN-LAST:event_jCheckBox1ActionPerformed
 
     private void datafileButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_datafileButtonActionPerformed
@@ -514,6 +546,9 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
                 Logger.getLogger(ProbeGUI.class.getName()).log(Level.SEVERE, null, ex);
                 return;
             }
+            
+            parser.setListener(new ParserEventListener());
+            packetProcessor.popResult();
             
             setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
             for (int b: fileData) {
@@ -534,11 +569,17 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
         File dir  = new File (dirName);
         File actualFile = new File (dir, fileName);
 
+        String fullfilename = actualFile.getAbsolutePath();
+        
         try {
             actualFile.createNewFile();
             FileWriter fw = new FileWriter(actualFile);
             fw.write(data);
             fw.close();
+            
+            lastSavedFileField.setText(fullfilename);
+            saveLastFileName(fileName);
+            locLabel.setText(Integer.toString(data.split("\r\n|\r|\n").length) + " строк");
         } catch (IOException ex) {
             Logger.getLogger(ProbeGUI.class.getName()).log(Level.SEVERE, null, ex);
         }
@@ -560,38 +601,82 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
     private void autoButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_autoButtonActionPerformed
         // Начать сканирование портов и найти из них подходящий
         setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
-        String port = checkAllPorts();
-        
-        if(port != null)
-            communicator.connect(port);
-        setCursor(Cursor.getDefaultCursor());
+        checkAllPorts();
     }//GEN-LAST:event_autoButtonActionPerformed
 
-    private String checkAllPorts() {
+    private void checkAllPorts() {
         communicator.disconnect();
+        parser.setListener(testEventListener);        
+        portsToCheck = new ArrayDeque<>();
+        portsToCheck.addAll(communicator.getAvailableComPorts().keySet());
+    }
+    
+    private void checkNextPort() {
+        String port = portsToCheck.peek();
         
-        HashMap ports = this.communicator.getAvailableComPorts();
-        
-        for (Object port : new TreeSet(ports.keySet())) {
-            if(checkPort( ((String)port) )) {
-                return (String)port;
-            }
+        if(port != null) {
+            // проверить что:
+            // 1. порт открывается и с него поступают данные
+            // 2. накопить некоторое количество данных (100 байт) и с помощью нового ProbeUsbParser проверить, что в них есть пакеты фреймов хоть какого-нибудь типа, кроме Dangling/Single Frame.
+            // при выполнении условий - вернуть true
+            if(communicator.connect(port) != Communicator.CONNECTION_OK)
+                onCheckFail();
+
+            testEventListener.startCheck();
         }
-                
-        return null;        
     }
     
-    private boolean checkPort(String port) {
-        // проверить что:
-        // 1. порт открывается и с него поступают данные
-        // 2. накопить некоторое количество данных (100 байт) и с помощью нового ProbeUsbParser проверить, что в них есть пакеты фреймов хоть какого-нибудь типа, кроме Dangling/Single Frame.
-        // при выполнении условий - вернуть true
-        if(communicator.connect(port) != Communicator.CONNECTION_OK)
-            return false;
-        
-        return false;
+    public void onCheckOK() {
+        String port = portsToCheck.pop();
+        communicator.connect(port);
+        parser.setListener(statusEventListener);
+        setCursor(Cursor.getDefaultCursor());
+        cboxPorts.setSelectedItem(port);
     }
     
+    public void onCheckFail() {
+        portsToCheck.pop();
+        if(portsToCheck.peek() != null)
+            checkNextPort();
+        else
+            setCursor(Cursor.getDefaultCursor());
+    }
+    
+    private void changeStatus(ConnectionStatus status) {
+        if(status == ConnectionStatus.Disconnected) {
+            connectionIndicator.setForeground(Color.red);
+            connectionIndicator.setText("disconnected");
+        }
+        else if(status == ConnectionStatus.Connected) {
+            connectionIndicator.setForeground(Color.black);
+            connectionIndicator.setText("connected");
+        }
+        else if(status == ConnectionStatus.Reading) {
+            connectionIndicator.setForeground(Color.green);
+            connectionIndicator.setText("reading bytes ...");
+        }
+        else if(status == ConnectionStatus.Data) {
+            connectionIndicator.setForeground(Color.green);
+            connectionIndicator.setText("got data ...");
+        }
+        else if(status == ConnectionStatus.Idle) {
+            connectionIndicator.setForeground(Color.black);
+            connectionIndicator.setText("idle");
+        }
+    }
+    
+    public void onStatusReading() {
+        changeStatus(ConnectionStatus.Reading);
+    }
+    
+    public void onStatusGotData() {
+        changeStatus(ConnectionStatus.Data);
+    }
+            
+    public void onStatusIdle() {
+        changeStatus(ConnectionStatus.Idle);
+    }
+
     private void addErrorLine(String line) {
         sendLog.append("ERROR : " + line + "\n");        
     }
@@ -602,7 +687,7 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
 
     private String getOutputDirectory() {
         Preferences prefs = Preferences.userNodeForPackage(ProbeGUI.class);
-        String defaultValue = System.getProperty("user.home");;
+        String defaultValue = System.getProperty("user.home");
         return prefs.get(PREF_OUTPUTDIR_NAME, defaultValue);
     }
     
@@ -611,6 +696,17 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
         prefs.put(PREF_OUTPUTDIR_NAME, outputDirectory);
     }
     
+    private String getLastFileName() {
+        Preferences prefs = Preferences.userNodeForPackage(ProbeGUI.class);
+        String defaultValue = System.getProperty("нет");
+        return prefs.get(PREF_LASTFILE_NAME, defaultValue);        
+    }
+    
+    private void saveLastFileName(String fileName) {
+        Preferences prefs = Preferences.userNodeForPackage(ProbeGUI.class);
+        prefs.put(PREF_LASTFILE_NAME, outputDirectory);       
+    }
+        
     /**
      * @param args the command line arguments
      */
@@ -675,6 +771,95 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
     private javax.swing.JTextArea sendLog;
     private javax.swing.JTextField txtCommandArg;
     // End of variables declaration//GEN-END:variables
+}
+
+interface CheckListener {
+    public void onCheckOK();
+    public void onCheckFail();
+}
+
+class TestParserEventListener extends ParserEventListener implements ActionListener {
+    
+    private CheckListener listener; 
+    
+    private boolean gotFrames = false;
+    
+    public TestParserEventListener(CheckListener listener) {
+        this.listener = listener;
+    }
+    
+    public void startCheck() {
+        gotFrames = false;
+        Timer timer = new Timer( 2000, this);
+        timer.setRepeats(false);
+        timer.start(); 
+    }
+    
+    public void actionPerformed(ActionEvent e) {
+        if(gotFrames) {
+            listener.onCheckOK();
+        }
+                
+        listener.onCheckFail();
+    }
+    
+    public void onNewByte(final int b) {}
+    public void onSync(final int[] bytes, final int nBytesInSync) {}
+    public void onNewFrame(final int b1, final int b2) {
+        gotFrames = true;
+    }
+    public void onNewDataPacket(final int[] packetData) {}
+    public void onNewTimePacket(final int[] packetData) {}
+    public void onNewSingleFrame(final int b1, final int b2) {}
+    public void onExpectNewPacket(final FramePacket p) {}
+    public void onPacketDataByte(final FramePacket p) {}
+}
+
+interface StatusListener {
+    public void onStatusReading();
+    public void onStatusGotData();
+    public void onStatusIdle();
+}
+
+class StatusParserEventListener extends ParserEventListener implements ActionListener {
+    
+    private StatusListener listener; 
+    private boolean checking  = false;
+    private boolean gotFrames = false;
+    
+    public StatusParserEventListener(StatusListener listener) {
+        this.listener = listener;
+    }
+    
+    public void startCheck() {
+        gotFrames = false;
+        checking = true;
+        Timer timer = new Timer( 1000, this);
+        timer.setRepeats(false);
+        timer.start(); 
+    }
+    
+    public void actionPerformed(ActionEvent e) {
+        if(!gotFrames) {
+            listener.onStatusIdle();
+        }
+    }
+    
+    public void onNewByte(final int b) {
+        listener.onStatusReading();
+    }
+    public void onSync(final int[] bytes, final int nBytesInSync) {}
+    public void onNewFrame(final int b1, final int b2) {
+        listener.onStatusGotData();
+        gotFrames = true;
+        if(!checking)
+            startCheck();
+    }
+    public void onNewDataPacket(final int[] packetData) {}
+    public void onNewTimePacket(final int[] packetData) {}
+    public void onNewSingleFrame(final int b1, final int b2) {}
+    public void onExpectNewPacket(final FramePacket p) {}
+    public void onPacketDataByte(final FramePacket p) {}    
 }
 
 class ComboItem {
