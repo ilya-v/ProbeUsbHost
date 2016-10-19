@@ -835,7 +835,6 @@ class TestParserEventListener extends ParserEventListener implements ActionListe
     }
     
     public void onNewByte(final int b) {
-        gotFrames = true;
     }
     public void onSync(final int[] bytes, final int nBytesInSync) {}
     public void onNewFrame(final int b1, final int b2) {
