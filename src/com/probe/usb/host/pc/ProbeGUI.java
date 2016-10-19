@@ -30,6 +30,7 @@ import com.probe.usb.host.parser.internal.FramePacket;
 import java.awt.Color;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import javax.swing.JOptionPane;
 import javax.swing.Timer;
 
 /*
@@ -77,6 +78,8 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
         Data,
         Idle
     }
+    
+    private ConnectionStatus status = ConnectionStatus.Disconnected;
     
     public void setCommunicator(Communicator communicator) {
         this.communicator = communicator;
@@ -483,10 +486,8 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
             addNormalLine(port + " is in use.");
         }
          
-        if (communicator.isConnected())
-        {
-            if (communicator.initIOStream())
-            {
+        if (communicator.isConnected()) {
+            if (communicator.initIOStream()) {
                 communicator.initListener();
             }
         }
@@ -601,6 +602,7 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
     private void autoButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_autoButtonActionPerformed
         // Начать сканирование портов и найти из них подходящий
         setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+        enableControls(false);
         checkAllPorts();
     }//GEN-LAST:event_autoButtonActionPerformed
 
@@ -609,6 +611,7 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
         parser.setListener(testEventListener);        
         portsToCheck = new ArrayDeque<>();
         portsToCheck.addAll(communicator.getAvailableComPorts().keySet());
+        checkNextPort();
     }
     
     private void checkNextPort() {
@@ -621,6 +624,12 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
             // при выполнении условий - вернуть true
             if(communicator.connect(port) != Communicator.CONNECTION_OK)
                 onCheckFail();
+            
+            if (communicator.isConnected()) {
+                if (communicator.initIOStream()) {
+                    communicator.initListener();
+                }
+            }
 
             testEventListener.startCheck();
         }
@@ -628,40 +637,52 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
     
     public void onCheckOK() {
         String port = portsToCheck.pop();
-        communicator.connect(port);
         parser.setListener(statusEventListener);
         setCursor(Cursor.getDefaultCursor());
         cboxPorts.setSelectedItem(port);
+        enableControls(true);
     }
     
     public void onCheckFail() {
+        communicator.disconnect();
         portsToCheck.pop();
-        if(portsToCheck.peek() != null)
+        if(portsToCheck.peek() != null) {
             checkNextPort();
-        else
+        }
+        else {
+            enableControls(true);
             setCursor(Cursor.getDefaultCursor());
+            JOptionPane.showMessageDialog(this, "Устройство не найдено");
+        }
     }
     
     private void changeStatus(ConnectionStatus status) {
         if(status == ConnectionStatus.Disconnected) {
             connectionIndicator.setForeground(Color.red);
-            connectionIndicator.setText("disconnected");
+            connectionIndicator.setText("DISCONNECTED");
+            this.status = status;
         }
         else if(status == ConnectionStatus.Connected) {
             connectionIndicator.setForeground(Color.black);
-            connectionIndicator.setText("connected");
+            connectionIndicator.setText("CONNECTED");
+            this.status = status;
         }
         else if(status == ConnectionStatus.Reading) {
-            connectionIndicator.setForeground(Color.green);
-            connectionIndicator.setText("reading bytes ...");
+            if(this.status == ConnectionStatus.Connected) {
+                connectionIndicator.setForeground(new Color(0.4f, 0.7f, 0.6f));
+                connectionIndicator.setText("READING BYTES ...");
+                this.status = status;
+            }
         }
         else if(status == ConnectionStatus.Data) {
-            connectionIndicator.setForeground(Color.green);
-            connectionIndicator.setText("got data ...");
+            connectionIndicator.setForeground(new Color(0.4f, 0.7f, 0.6f));
+            connectionIndicator.setText("DATA ...");
+            this.status = status;
         }
         else if(status == ConnectionStatus.Idle) {
             connectionIndicator.setForeground(Color.black);
-            connectionIndicator.setText("idle");
+            connectionIndicator.setText("IDLE");
+            this.status = status;
         }
     }
     
@@ -705,6 +726,15 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
     private void saveLastFileName(String fileName) {
         Preferences prefs = Preferences.userNodeForPackage(ProbeGUI.class);
         prefs.put(PREF_LASTFILE_NAME, outputDirectory);       
+    }
+    
+    private void enableControls(boolean enable) {
+        cboxPorts.setEnabled(enable);
+        cboxCommand.setEnabled(enable);
+        cboxArgumentType.setEnabled(enable);
+        txtCommandArg.setEnabled(enable);
+        sendButton.setEnabled(enable);
+        autoButton.setEnabled(enable);
     }
         
     /**
@@ -798,12 +828,15 @@ class TestParserEventListener extends ParserEventListener implements ActionListe
     public void actionPerformed(ActionEvent e) {
         if(gotFrames) {
             listener.onCheckOK();
+            return;
         }
                 
         listener.onCheckFail();
     }
     
-    public void onNewByte(final int b) {}
+    public void onNewByte(final int b) {
+        gotFrames = true;
+    }
     public void onSync(final int[] bytes, final int nBytesInSync) {}
     public void onNewFrame(final int b1, final int b2) {
         gotFrames = true;
