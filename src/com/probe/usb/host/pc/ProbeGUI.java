@@ -30,6 +30,7 @@ import com.probe.usb.host.parser.internal.FramePacket;
 import java.awt.Color;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.util.prefs.BackingStoreException;
 import javax.swing.JOptionPane;
 import javax.swing.Timer;
 
@@ -80,6 +81,9 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
     }
     
     private ConnectionStatus status = ConnectionStatus.Disconnected;
+    
+    private int locCounter = 0;
+    private boolean fileStarted = false;
     
     public void setCommunicator(Communicator communicator) {
         this.communicator = communicator;
@@ -150,7 +154,7 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
                 if(communicator != null && communicator.isConnected())
                     communicator.disconnect();
 
-                writeNewFileToOutputDirectory(packetProcessor.popResult());
+                writeNewFileToOutputDirectory(packetProcessor.popResult(), fileStarted);
             }
         });
     }
@@ -478,6 +482,7 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
             addNormalLine("Connection OK");
             changeStatus(ConnectionStatus.Connected);
             parser.setListener(statusEventListener);
+            statusEventListener.startCheck();
         }
         else if(Communicator.CONNECTION_FAILED == result) {
             addErrorLine("FAILED to open " + port);
@@ -518,7 +523,8 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
     private void jCheckBox1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jCheckBox1ActionPerformed
         dataFromFile = ((JCheckBox)evt.getSource()).isSelected();
         
-        writeNewFileToOutputDirectory(packetProcessor.popResult());
+        writeNewFileToOutputDirectory(packetProcessor.popResult(), fileStarted);
+        fileStarted = false;
         
         datafileButton.setEnabled(dataFromFile);
         cboxPorts.setEnabled(!dataFromFile);
@@ -528,8 +534,10 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
         sendButton.setEnabled(!dataFromFile);
         autoButton.setEnabled(!dataFromFile);
         
-        if(!dataFromFile)
+        if(!dataFromFile) {
             parser.setListener(statusEventListener);
+            statusEventListener.startCheck();
+        }
     }//GEN-LAST:event_jCheckBox1ActionPerformed
 
     private void datafileButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_datafileButtonActionPerformed
@@ -557,30 +565,43 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
             }
             
             // Записать результат парсинга в файл
-            writeNewFileToOutputDirectory(packetProcessor.popResult());
+            writeNewFileToOutputDirectory(packetProcessor.popResult(), false);
             setCursor(Cursor.getDefaultCursor());
         }
     }//GEN-LAST:event_datafileButtonActionPerformed
 
-    private void writeNewFileToOutputDirectory(String data) {
+    private void writeNewFileToOutputDirectory(String data, boolean append) {
         if (data.isEmpty())
             return;
-        String dirName = outputDirectory;
-        String fileName = "accel-" + new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss").format(new Date()) + ".txt";
-        File dir  = new File (dirName);
-        File actualFile = new File (dir, fileName);
-
-        String fullfilename = actualFile.getAbsolutePath();
         
+        File actualFile;
+        
+        if(!append) {
+            String dirName = outputDirectory;
+            String fileName = "accel-" + new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss").format(new Date()) + ".txt";
+            File dir  = new File (dirName);
+            actualFile = new File (dir, fileName);
+        }
+        else {
+            actualFile = new File(getLastFileName());
+        }
+
         try {
-            actualFile.createNewFile();
+            if(!append)
+                actualFile.createNewFile();
+            
             FileWriter fw = new FileWriter(actualFile);
             fw.write(data);
             fw.close();
+
+            if(!append) {
+                String fullfilename = actualFile.getAbsolutePath();            
+                lastSavedFileField.setText(fullfilename);
+                saveLastFileName(fullfilename);
+            }
             
-            lastSavedFileField.setText(fullfilename);
-            saveLastFileName(fileName);
-            locLabel.setText(Integer.toString(data.split("\r\n|\r|\n").length) + " строк");
+            locCounter += data.split("\r\n|\r|\n").length;
+            locLabel.setText(Integer.toString(locCounter) + " строк");
         } catch (IOException ex) {
             Logger.getLogger(ProbeGUI.class.getName()).log(Level.SEVERE, null, ex);
         }
@@ -601,9 +622,11 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
 
     private void autoButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_autoButtonActionPerformed
         // Начать сканирование портов и найти из них подходящий
-        setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
-        enableControls(false);
-        checkAllPorts();
+        if(communicator.getAvailableComPorts().size() > 0) {
+            setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+            enableControls(false);
+            checkAllPorts();
+        }
     }//GEN-LAST:event_autoButtonActionPerformed
 
     private void checkAllPorts() {
@@ -638,6 +661,7 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
     public void onCheckOK() {
         String port = portsToCheck.pop();
         parser.setListener(statusEventListener);
+        statusEventListener.startCheck();
         setCursor(Cursor.getDefaultCursor());
         cboxPorts.setSelectedItem(port);
         enableControls(true);
@@ -678,11 +702,20 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
             connectionIndicator.setForeground(new Color(0.4f, 0.7f, 0.6f));
             connectionIndicator.setText("DATA ...");
             this.status = status;
+            
+            // Тут сразу скидывать в файл и обновлять счетчик строк
+            String result = packetProcessor.popResult();
+            if( result.length() > 0) {
+                writeNewFileToOutputDirectory(result, fileStarted);
+                fileStarted = true;
+            }
         }
         else if(status == ConnectionStatus.Idle) {
-            connectionIndicator.setForeground(Color.black);
-            connectionIndicator.setText("IDLE");
-            this.status = status;
+            if(this.status == ConnectionStatus.Data) {
+                connectionIndicator.setForeground(Color.black);
+                connectionIndicator.setText("IDLE");
+                this.status = status;
+            }
         }
     }
     
@@ -725,7 +758,7 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
     
     private void saveLastFileName(String fileName) {
         Preferences prefs = Preferences.userNodeForPackage(ProbeGUI.class);
-        prefs.put(PREF_LASTFILE_NAME, outputDirectory);       
+        prefs.put(PREF_LASTFILE_NAME, fileName); 
     }
     
     private void enableControls(boolean enable) {
@@ -864,17 +897,22 @@ class StatusParserEventListener extends ParserEventListener implements ActionLis
     }
     
     public void startCheck() {
-        gotFrames = false;
-        checking = true;
-        Timer timer = new Timer( 1000, this);
-        timer.setRepeats(false);
-        timer.start(); 
+        if(!checking) {
+            gotFrames = false;
+            checking = true;
+            Timer timer = new Timer( 1000, this);
+            timer.setRepeats(false);
+            timer.start(); 
+        }
     }
     
     public void actionPerformed(ActionEvent e) {
         if(!gotFrames) {
             listener.onStatusIdle();
         }
+        
+        checking = false;
+        startCheck();
     }
     
     public void onNewByte(final int b) {
@@ -884,8 +922,6 @@ class StatusParserEventListener extends ParserEventListener implements ActionLis
     public void onNewFrame(final int b1, final int b2) {
         listener.onStatusGotData();
         gotFrames = true;
-        if(!checking)
-            startCheck();
     }
     public void onNewDataPacket(final int[] packetData) {}
     public void onNewTimePacket(final int[] packetData) {}
