@@ -694,10 +694,6 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
                         commands.add(line);
                     }
                 }
-                
-                /*for(String command : commands) {
-                    command = command.split("//")[0];
-                }*/
 
                 for (int i = 0; i < commands.size(); i++) {
                     if(commands.get(i).contains("//"))
