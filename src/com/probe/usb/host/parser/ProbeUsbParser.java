@@ -1,7 +1,7 @@
 package com.probe.usb.host.parser;
 
 import com.probe.usb.host.parser.internal.*;
-import com.probe.usb.host.parser.internal.PacketProcessor;
+import com.probe.usb.host.parser.processor.PacketProcessor;
 
 import java.util.LinkedList;
 import java.util.List;
@@ -14,7 +14,7 @@ public class ProbeUsbParser
 
     protected FramePacket[] framePackets = new FramePacket[] {
         new FramePacket(PacketType.DataPacket, dataFramePacketTypes),
-        new FramePacket(PacketType.UnixTimePacket, unixTimePacketTypes),
+        new FramePacket(PacketType.MessageFramePacket, messageFramePacketTypes),
         new FramePacket(PacketType.DeviceStatePacket, deviceStateFrameTypes),
         new FramePacket(PacketType.AccStatePacket, accStateFrameTypes),
         new FramePacket(PacketType.DanglingPacket, null)

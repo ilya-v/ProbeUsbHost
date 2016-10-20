@@ -1,7 +1,5 @@
 package com.probe.usb.host.parser.internal;
 
-import java.util.Arrays;
-
 import static com.probe.usb.host.parser.internal.DataFormat.FrameType.*;
 
 public class DataFormat {
@@ -12,11 +10,11 @@ public class DataFormat {
 
     static public FrameType[]
             dataFramePacketTypes    = {frameT1, frameT2, frameAX1, frameAX2, frameAY1, frameAY2, frameAZ1, frameAZ2},
-            unixTimePacketTypes     = {frameMSG1, frameMSG2, frameMSG3, frameMSG4},
+            messageFramePacketTypes = {frameMSG1, frameMSG2, frameMSG3, frameMSG4},
             deviceStateFrameTypes   = {frameST},
             accStateFrameTypes      = {frameSA};
 
-    public enum PacketType { DataPacket, UnixTimePacket, DeviceStatePacket, AccStatePacket, DanglingPacket };
+    public enum PacketType { DataPacket, MessageFramePacket, DeviceStatePacket, AccStatePacket, DanglingPacket };
 
     static public int extractCounter(final int b) { return b & 0b00000111; }
     static public int nextCounter(final int counter) { return (counter + 1) & 0b00000111; }
@@ -57,8 +55,25 @@ public class DataFormat {
         }
     }
 
+    public enum MessageType {
+        UnixTimeMessage(unixTimeMessageFirstByte),
+        ConfigParamMessage(configParamMessageFirstByte),
+        AccRegMessage(accRegMessageFirstByte),
+        GenericMessage(-1),
+        ;
+
+        final int firstByte;
+        public int getFirstByte() { return  firstByte; }
+        MessageType(final int firstByte) { this.firstByte = firstByte; }
+    }
+
+    static protected final int
+            unixTimeMessageFirstByte = 0xF6,
+            configParamMessageFirstByte = 0xF2,
+            accRegMessageFirstByte = 0xF4;
+
     static public final int
-            unixTimeFirstByte = 0xF6;
+            messageLength = 4;
 
     static public final int
             unixTimeHiSecondByte = 0x00,
@@ -76,15 +91,27 @@ public class DataFormat {
     }
 
     static public int decodeUnixTime(final int[] packetData, UnixTime unixTime) {
-        if (packetData[0] == unixTimeFirstByte && packetData[1] == unixTimeHiSecondByte) {
+        if (packetData[0] == unixTimeMessageFirstByte && packetData[1] == unixTimeHiSecondByte) {
             unixTime.assignHiBytes(packetData[2], packetData[3]);
             unixTime.assignLoBytes(0, 0);
             return -1; // time not ready
         }
 
-        if (packetData[0] == unixTimeFirstByte && packetData[1] == unixTimeLoSecondByte) {
+        if (packetData[0] == unixTimeMessageFirstByte && packetData[1] == unixTimeLoSecondByte) {
             return unixTime.assignLoBytes(packetData[2], packetData[3]);
         }
         return -1;
+    }
+
+    static public int decodeIndexInConfigParamMessage(final int[] packetData) {
+        return (packetData != null && packetData.length == messageLength
+                && packetData[0] == configParamMessageFirstByte)?
+                packetData[1] : -1;
+    }
+
+    static public int decodeAddressInAccRegMessage(final int[] packetData) {
+        return (packetData != null && packetData.length == messageLength
+                && packetData[0] == accRegMessageFirstByte)?
+                packetData[1] : -1;
     }
 }

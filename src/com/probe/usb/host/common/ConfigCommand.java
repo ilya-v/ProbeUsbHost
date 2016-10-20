@@ -1,4 +1,4 @@
-package com.probe.usb.host.commander;
+package com.probe.usb.host.common;
 
 public enum ConfigCommand  {
     writeConfig    (0xF1),

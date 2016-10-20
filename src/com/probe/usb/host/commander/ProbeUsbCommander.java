@@ -1,10 +1,12 @@
 package com.probe.usb.host.commander;
 
+import com.probe.usb.host.common.ConfigParamType;
+
 import java.util.List;
 import java.util.Date;
 import java.util.ArrayList;
 
-import static com.probe.usb.host.commander.ConfigCommand.*;
+import static com.probe.usb.host.common.ConfigCommand.*;
 
 
 public class ProbeUsbCommander

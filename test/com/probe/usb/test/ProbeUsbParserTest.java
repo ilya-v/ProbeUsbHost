@@ -1,7 +1,7 @@
 package com.probe.usb.test;
 
 import com.probe.usb.host.parser.ProbeUsbParser;
-import com.probe.usb.host.parser.TablePacketProcessor;
+import com.probe.usb.host.parser.processor.TablePrintProcessor;
 import com.probe.usb.host.parser.internal.*;
 import org.junit.After;
 import org.junit.Before;
@@ -149,7 +149,7 @@ public class ProbeUsbParserTest {
 
         String result1 = "";
         {
-            TablePacketProcessor packetProcessor = new TablePacketProcessor();
+            TablePrintProcessor packetProcessor = new TablePrintProcessor();
             ProbeUsbParser parser = new ProbeUsbParser().addPacketProcessor(packetProcessor);
             for (byte b : capture) {
                 parser.addByte(Byte.toUnsignedInt(b));
@@ -161,7 +161,7 @@ public class ProbeUsbParserTest {
 
         String result2 = "";
         {
-            TablePacketProcessor packetProcessor = new TablePacketProcessor();
+            TablePrintProcessor packetProcessor = new TablePrintProcessor();
             ProbeUsbParser parser = new ProbeUsbParser().addPacketProcessor(packetProcessor);
             for (byte b : capture) {
                 parser.addByte(Byte.toUnsignedInt(b));

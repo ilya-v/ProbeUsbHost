@@ -1,9 +1,9 @@
 package com.probe.usb.host.pc;
 
-import com.probe.usb.host.commander.ConfigParamType;
+import com.probe.usb.host.common.ConfigParamType;
 import com.probe.usb.host.commander.ProbeUsbCommander;
 import com.probe.usb.host.parser.ProbeUsbParser;
-import com.probe.usb.host.parser.TablePacketProcessor;
+import com.probe.usb.host.parser.processor.TablePrintProcessor;
 
 import java.awt.Cursor;
 import java.awt.event.WindowAdapter;
@@ -24,7 +24,7 @@ import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JFileChooser;
 
-import static com.probe.usb.host.commander.ConfigCommand.*;
+import static com.probe.usb.host.common.ConfigCommand.*;
 import com.probe.usb.host.parser.ParserEventListener;
 import com.probe.usb.host.parser.internal.FramePacket;
 import java.awt.Color;
@@ -56,7 +56,7 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
     
     private ProbeUsbCommander probeCommander = new ProbeUsbCommander();
 
-    private TablePacketProcessor packetProcessor = new TablePacketProcessor();
+    private TablePrintProcessor packetProcessor = new TablePrintProcessor();
     private ProbeUsbParser parser = new ProbeUsbParser().addPacketProcessor(packetProcessor);
 
     private boolean dataFromFile = false;
