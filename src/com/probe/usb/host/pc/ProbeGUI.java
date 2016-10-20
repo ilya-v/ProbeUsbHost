@@ -30,6 +30,7 @@ import com.probe.usb.host.parser.internal.FramePacket;
 import java.awt.Color;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.nio.charset.StandardCharsets;
 import java.util.prefs.BackingStoreException;
 import javax.swing.JOptionPane;
 import javax.swing.Timer;
@@ -62,6 +63,8 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
     
     private final String PREF_OUTPUTDIR_NAME = "preference_outputdir";
     private final String PREF_LASTFILE_NAME = "preference_lastfile";
+    private final String PREF_DATAFILEDIR = "preference_datafiledir";
+    private final String PREF_CONFIGFILEDIR = "preference_configfiledir";
     
     private String outputDirectory;
 
@@ -84,6 +87,9 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
     
     private int locCounter = 0;
     private boolean fileStarted = false;
+    
+    private List<String> commands = new ArrayList<String>();
+    
     
     public void setCommunicator(Communicator communicator) {
         this.communicator = communicator;
@@ -193,6 +199,8 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
         jLabel8 = new javax.swing.JLabel();
         lastSavedFileField = new javax.swing.JTextField();
         locLabel = new javax.swing.JLabel();
+        selectCommandFileButton = new javax.swing.JButton();
+        performCommandsButton = new javax.swing.JButton();
 
         jTextArea1.setColumns(20);
         jTextArea1.setRows(5);
@@ -281,6 +289,23 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
 
         lastSavedFileField.setEditable(false);
 
+        locLabel.setText("        ");
+
+        selectCommandFileButton.setText("Открыть файл с командами настройки");
+        selectCommandFileButton.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                selectCommandFileButtonActionPerformed(evt);
+            }
+        });
+
+        performCommandsButton.setText("Выполнить команды");
+        performCommandsButton.setEnabled(false);
+        performCommandsButton.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                performCommandsButtonActionPerformed(evt);
+            }
+        });
+
         javax.swing.GroupLayout layout = new javax.swing.GroupLayout(getContentPane());
         getContentPane().setLayout(layout);
         layout.setHorizontalGroup(
@@ -298,44 +323,48 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
                     .addGroup(layout.createSequentialGroup()
                         .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                             .addGroup(layout.createSequentialGroup()
-                                .addComponent(jLabel6)
-                                .addGap(24, 24, 24)
                                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                                    .addComponent(lastSavedFileField)
-                                    .addComponent(outputDirDisplay)))
-                            .addGroup(layout.createSequentialGroup()
+                                    .addComponent(cboxCommand, javax.swing.GroupLayout.PREFERRED_SIZE, 233, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                    .addComponent(jLabel2))
+                                .addGap(20, 20, 20)
                                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                                    .addGroup(layout.createSequentialGroup()
-                                        .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                                            .addComponent(cboxCommand, javax.swing.GroupLayout.PREFERRED_SIZE, 233, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                            .addComponent(jLabel2))
-                                        .addGap(20, 20, 20)
-                                        .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                                            .addComponent(cboxArgumentType, javax.swing.GroupLayout.PREFERRED_SIZE, 244, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                            .addComponent(jLabel3)))
-                                    .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING)
-                                        .addComponent(autoButton, javax.swing.GroupLayout.PREFERRED_SIZE, 84, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                        .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                                            .addComponent(jLabel8)
-                                            .addComponent(jLabel4)
-                                            .addGroup(layout.createSequentialGroup()
-                                                .addComponent(jLabel7)
-                                                .addGap(18, 18, 18)
-                                                .addComponent(connectionIndicator, javax.swing.GroupLayout.PREFERRED_SIZE, 200, javax.swing.GroupLayout.PREFERRED_SIZE)))))
+                                    .addComponent(cboxArgumentType, javax.swing.GroupLayout.PREFERRED_SIZE, 244, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                    .addComponent(jLabel3)
+                                    .addComponent(performCommandsButton))
                                 .addGap(18, 18, 18)
                                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                                    .addComponent(txtCommandArg)
                                     .addGroup(layout.createSequentialGroup()
-                                        .addComponent(jCheckBox1, javax.swing.GroupLayout.PREFERRED_SIZE, 150, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                        .addGap(0, 107, Short.MAX_VALUE))
-                                    .addGroup(layout.createSequentialGroup()
-                                        .addComponent(jLabel5)
-                                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
-                                    .addComponent(txtCommandArg))))
+                                        .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                                            .addComponent(jCheckBox1, javax.swing.GroupLayout.PREFERRED_SIZE, 150, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                            .addComponent(jLabel5))
+                                        .addGap(0, 79, Short.MAX_VALUE))))
+                            .addGroup(layout.createSequentialGroup()
+                                .addComponent(jLabel6)
+                                .addGap(24, 24, 24)
+                                .addComponent(outputDirDisplay))
+                            .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING)
+                                .addComponent(autoButton, javax.swing.GroupLayout.PREFERRED_SIZE, 84, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                .addGroup(javax.swing.GroupLayout.Alignment.LEADING, layout.createSequentialGroup()
+                                    .addComponent(jLabel7)
+                                    .addGap(18, 18, 18)
+                                    .addComponent(connectionIndicator, javax.swing.GroupLayout.PREFERRED_SIZE, 200, javax.swing.GroupLayout.PREFERRED_SIZE)))
+                            .addGroup(layout.createSequentialGroup()
+                                .addComponent(jLabel8)
+                                .addGap(35, 35, 35)
+                                .addComponent(lastSavedFileField)))
                         .addGap(18, 18, 18)
                         .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING, false)
                             .addComponent(sendButton, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                            .addComponent(outputdirButton, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                            .addComponent(locLabel, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))))
+                            .addGroup(layout.createSequentialGroup()
+                                .addComponent(locLabel, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
+                                .addGap(95, 95, 95))
+                            .addComponent(outputdirButton, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)))
+                    .addGroup(layout.createSequentialGroup()
+                        .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                            .addComponent(jLabel4)
+                            .addComponent(selectCommandFileButton, javax.swing.GroupLayout.PREFERRED_SIZE, 233, javax.swing.GroupLayout.PREFERRED_SIZE))
+                        .addGap(0, 0, Short.MAX_VALUE)))
                 .addContainerGap())
         );
         layout.setVerticalGroup(
@@ -367,7 +396,11 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
                     .addComponent(cboxArgumentType, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
                     .addComponent(txtCommandArg, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
                     .addComponent(sendButton))
-                .addGap(22, 22, 22)
+                .addGap(18, 18, 18)
+                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
+                    .addComponent(selectCommandFileButton)
+                    .addComponent(performCommandsButton))
+                .addGap(33, 33, 33)
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                     .addComponent(jLabel6)
                     .addComponent(outputDirDisplay, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
@@ -379,8 +412,8 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
                     .addComponent(locLabel))
                 .addGap(18, 18, 18)
                 .addComponent(jLabel4)
-                .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
-                .addComponent(jScrollPane2, javax.swing.GroupLayout.DEFAULT_SIZE, 433, Short.MAX_VALUE)
+                .addGap(18, 18, 18)
+                .addComponent(jScrollPane2, javax.swing.GroupLayout.DEFAULT_SIZE, 396, Short.MAX_VALUE)
                 .addContainerGap())
         );
 
@@ -629,6 +662,75 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
         }
     }//GEN-LAST:event_autoButtonActionPerformed
 
+    private void selectCommandFileButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_selectCommandFileButtonActionPerformed
+        // Выбрать файл с коммандами
+        String configDir = getConfigFileDirectory();    // предыдущая директория
+        commands.clear();
+        
+        final JFileChooser fc = new JFileChooser(configDir);
+        int returnVal = fc.showOpenDialog(ProbeGUI.this);
+
+        if (returnVal == JFileChooser.APPROVE_OPTION) {
+            File file = fc.getSelectedFile();
+            addNormalLine("CONFIG : " + file.getAbsolutePath());
+            
+            String path = file.getParent();
+            if(path != null) {
+                saveConfigFileDirectory(path);
+            }
+            
+            try {
+                List<String> lines = Files.readAllLines(file.toPath(), StandardCharsets.UTF_8);
+                
+                for(String line : lines) {
+                    if(line.contains("CRLF")) {
+                        String [] parts = line.split("CRLF");
+                        
+                        for(String part : parts) {
+                            commands.add(part);
+                        }
+                    }
+                    else {
+                        commands.add(line);
+                    }
+                }
+                
+                /*for(String command : commands) {
+                    command = command.split("//")[0];
+                }*/
+
+                for (int i = 0; i < commands.size(); i++) {
+                    if(commands.get(i).contains("//"))
+                        commands.set(i, commands.get(i).split("//")[0]);
+                }                
+            } catch (IOException ex) {
+                Logger.getLogger(ProbeGUI.class.getName()).log(Level.SEVERE, null, ex);
+                return;
+            }  
+            
+            performCommandsButton.setEnabled(true);
+        }
+    }//GEN-LAST:event_selectCommandFileButtonActionPerformed
+
+    private void performCommandsButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_performCommandsButtonActionPerformed
+        setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+        // Послать команды в устройство
+        for(String command : commands) {
+            String [] byte_codes = command.split(" ");
+            
+            for(String byte_code : byte_codes) {
+                if(byte_code.length() > 0 ) {
+                    byte nextByte = Byte.parseByte(byte_code, 16);
+                    communicator.writeData(new byte [] {nextByte});
+                }
+            }
+            addNormalLine(command.trim());
+        }
+        
+        performCommandsButton.setEnabled(false);
+        setCursor(Cursor.getDefaultCursor());
+    }//GEN-LAST:event_performCommandsButtonActionPerformed
+
     private void checkAllPorts() {
         communicator.disconnect();
         parser.setListener(testEventListener);        
@@ -761,6 +863,17 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
         prefs.put(PREF_LASTFILE_NAME, fileName); 
     }
     
+    private String getConfigFileDirectory() {
+        Preferences prefs = Preferences.userNodeForPackage(ProbeGUI.class);
+        String defaultValue = System.getProperty("user.home");
+        return prefs.get(PREF_CONFIGFILEDIR, defaultValue);        
+    }
+    
+    private void saveConfigFileDirectory(String dir) {
+        Preferences prefs = Preferences.userNodeForPackage(ProbeGUI.class);
+        prefs.put(PREF_CONFIGFILEDIR, dir);         
+    }
+    
     private void enableControls(boolean enable) {
         cboxPorts.setEnabled(enable);
         cboxCommand.setEnabled(enable);
@@ -830,6 +943,8 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
     private javax.swing.JLabel locLabel;
     private javax.swing.JTextField outputDirDisplay;
     private javax.swing.JButton outputdirButton;
+    private javax.swing.JButton performCommandsButton;
+    private javax.swing.JButton selectCommandFileButton;
     private javax.swing.JButton sendButton;
     private javax.swing.JTextArea sendLog;
     private javax.swing.JTextField txtCommandArg;
