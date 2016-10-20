@@ -610,6 +610,7 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
         File actualFile;
         
         if(!append) {
+            locCounter = 0;
             String dirName = outputDirectory;
             String fileName = "accel-" + new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss").format(new Date()) + ".txt";
             File dir  = new File (dirName);
