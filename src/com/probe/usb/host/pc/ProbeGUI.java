@@ -699,7 +699,19 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
                 for (int i = 0; i < commands.size(); i++) {
                     if(commands.get(i).contains("//"))
                         commands.set(i, commands.get(i).split("//")[0]);
-                }                
+                }
+
+                /*Iterator<String> commandsIterator = commands.iterator();
+                
+                while(commandsIterator.hasNext()) {
+                    String nextCommand = commandsIterator.next();
+                    
+                    commandsIterator.
+                    
+                    //if(nextCommand.contains("//"))
+                    //    commandsIterator.set(nextCommand.split("//")[0]);
+                }*/
+                
             } catch (IOException ex) {
                 Logger.getLogger(ProbeGUI.class.getName()).log(Level.SEVERE, null, ex);
                 return;
@@ -711,23 +723,40 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
 
     private void performCommandsButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_performCommandsButtonActionPerformed
         setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
-        // Послать команды в устройство
-        for(String command : commands) {
-            String [] byte_codes = command.split(" ");
-            
-            for(String byte_code : byte_codes) {
-                if(byte_code.length() > 0 ) {
-                    byte nextByte = Byte.parseByte(byte_code, 16);
-                    communicator.writeData(new byte [] {nextByte});
-                }
-            }
-            addNormalLine(command.trim());
-        }
-        
         performCommandsButton.setEnabled(false);
-        setCursor(Cursor.getDefaultCursor());
+        sendNextCommandLine();
     }//GEN-LAST:event_performCommandsButtonActionPerformed
 
+    private void sendNextCommandLine() {
+        String command = commands.get(0);
+        commands.remove(0);
+        
+        String [] byte_codes = command.split(" ");
+
+        for(String byte_code : byte_codes) {
+            if(byte_code.length() > 0 ) {
+                byte nextByte = Byte.parseByte(byte_code, 16);
+                communicator.writeData(new byte [] {nextByte});
+            }
+        }
+        addNormalLine(command.trim());  
+        
+        // Перерыв между коммандами по секунде
+        if(commands.size() > 0) {
+            Timer timer = new Timer(1000, new ActionListener() {
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    sendNextCommandLine();
+                }
+            });
+            timer.setRepeats(false);
+            timer.start();
+        }
+        else {
+            setCursor(Cursor.getDefaultCursor());
+        }
+    }
+    
     private void checkAllPorts() {
         communicator.disconnect();
         parser.setListener(testEventListener);        
