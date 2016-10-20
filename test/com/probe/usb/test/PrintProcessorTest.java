@@ -2,7 +2,6 @@ package com.probe.usb.test;
 
 import com.probe.usb.host.parser.ProbeUsbParser;
 import com.probe.usb.host.parser.processor.PrintProcessor;
-import com.probe.usb.host.parser.processor.TablePrintProcessor;
 import org.junit.Test;
 
 public class PrintProcessorTest {

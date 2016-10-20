@@ -91,9 +91,10 @@ public class DataFormat {
     }
 
     static public int decodeUnixTime(final int[] packetData, UnixTime unixTime) {
+        if (packetData.length != 4)
+            return -1;
         if (packetData[0] == unixTimeMessageFirstByte && packetData[1] == unixTimeHiSecondByte) {
             unixTime.assignHiBytes(packetData[2], packetData[3]);
-            unixTime.assignLoBytes(0, 0);
             return -1; // time not ready
         }
 

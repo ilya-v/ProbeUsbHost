@@ -3,6 +3,8 @@ package com.probe.usb.host.pc;
 import com.probe.usb.host.common.ConfigParamType;
 import com.probe.usb.host.commander.ProbeUsbCommander;
 import com.probe.usb.host.parser.ProbeUsbParser;
+import com.probe.usb.host.parser.processor.PrintProcessor;
+import com.probe.usb.host.parser.processor.PrintProcessor.OutputElement;
 import com.probe.usb.host.parser.processor.TablePrintProcessor;
 
 import java.awt.Cursor;
@@ -48,16 +50,27 @@ import javax.swing.Timer;
 public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receiver, CheckListener, StatusListener {
 
     public static ProbeGUI instance;
-    
+
     private Communicator communicator;
-    
+
     private ComboItem selectedCommand;
     private ComboItem selectedArgument;
-    
+
     private ProbeUsbCommander probeCommander = new ProbeUsbCommander();
 
     private TablePrintProcessor packetProcessor = new TablePrintProcessor();
-    private ProbeUsbParser parser = new ProbeUsbParser().addPacketProcessor(packetProcessor);
+    private PrintProcessor printProcessor = new PrintProcessor()
+            .disableOutputOf(OutputElement.DanglingPacket)
+            .disableOutputOf(OutputElement.DataPacket);
+
+    private ProbeUsbParser parser = new ProbeUsbParser()
+            .addPacketProcessor(packetProcessor)
+            .addPacketProcessor(printProcessor);
+
+    private OutputWriter outputWriter = new OutputWriter()
+            .setFileNamePrefix("accel-")
+            .setOutputDir( getOutputDirectory() );
+
 
     private boolean dataFromFile = false;
     
@@ -94,7 +107,11 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
     public void setCommunicator(Communicator communicator) {
         this.communicator = communicator;
         this.communicator.setReceiver(this);
-        
+        updatePorts();
+    }
+
+    public void updatePorts() {
+        cboxPorts.removeAllItems();
         HashMap ports = this.communicator.getAvailableComPorts();
         for (Object key : new TreeSet(ports.keySet())) {
             cboxPorts.addItem((String)key);
@@ -103,6 +120,9 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
     
     public void handle(byte data) {
         parser.addByte(data);
+        final String logLine = printProcessor.popResult();
+        if (!logLine.isEmpty())
+            addNormalLine(logLine);
     }
     
     /**
@@ -122,6 +142,7 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
         outputDirDisplay.setText(outputDirectory);
         
         lastSavedFileField.setText(getLastFileName());
+
         
         Vector modelPacketTypes = new Vector();
         modelPacketTypes.addElement( new ComboItem(writeConfig.getFirstByte(), writeConfig.name() ) );
@@ -160,7 +181,7 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
                 if(communicator != null && communicator.isConnected())
                     communicator.disconnect();
 
-                writeNewFileToOutputDirectory(packetProcessor.popResult(), fileStarted);
+                writeNewFileToOutputDirectory(packetProcessor.popResult());
             }
         });
     }
@@ -556,7 +577,7 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
     private void jCheckBox1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jCheckBox1ActionPerformed
         dataFromFile = ((JCheckBox)evt.getSource()).isSelected();
         
-        writeNewFileToOutputDirectory(packetProcessor.popResult(), fileStarted);
+        writeNewFileToOutputDirectory(packetProcessor.popResult());
         fileStarted = false;
         
         datafileButton.setEnabled(dataFromFile);
@@ -598,48 +619,35 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
             }
             
             // Записать результат парсинга в файл
-            writeNewFileToOutputDirectory(packetProcessor.popResult(), false);
+            writeNewFileToOutputDirectory(packetProcessor.popResult());
             setCursor(Cursor.getDefaultCursor());
         }
     }//GEN-LAST:event_datafileButtonActionPerformed
 
-    private void writeNewFileToOutputDirectory(String data, boolean append) {
+    private void writeNewFileToOutputDirectory(String data) {
         if (data.isEmpty())
             return;
-        
-        File actualFile;
-        
-        if(!append) {
-            locCounter = 0;
-            String dirName = outputDirectory;
-            String fileName = "accel-" + new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss").format(new Date()) + ".txt";
-            File dir  = new File (dirName);
-            actualFile = new File (dir, fileName);
-        }
-        else {
-            actualFile = new File(getLastFileName());
-        }
-
         try {
-            if(!append)
-                actualFile.createNewFile();
-            
-            FileWriter fw = new FileWriter(actualFile);
-            fw.write(data);
-            fw.close();
-
-            if(!append) {
-                String fullfilename = actualFile.getAbsolutePath();            
-                lastSavedFileField.setText(fullfilename);
-                saveLastFileName(fullfilename);
-            }
-            
-            locCounter += data.split("\r\n|\r|\n").length;
-            locLabel.setText(Integer.toString(locCounter) + " строк");
-        } catch (IOException ex) {
-            Logger.getLogger(ProbeGUI.class.getName()).log(Level.SEVERE, null, ex);
+            outputWriter.write(data);
         }
+        catch (IOException e) {
+            Logger.getLogger(ProbeGUI.class.getName()).log(Level.SEVERE, null, e);
+        }
+
+        if (outputWriter.getCurrentFileName() == null)
+            return;
+
+        final String lastFileName = lastSavedFileField.getText();
+        if (!lastFileName.equals(outputWriter.getCurrentFileName())) {
+            lastSavedFileField.setText(outputWriter.getCurrentFileName());
+            saveLastFileName(outputWriter.getCurrentFileName());
+            locCounter = 0;
+        }
+
+        locCounter += data.split("\r\n|\r|\n").length;
+        locLabel.setText(Integer.toString(locCounter) + " строк");
     }
+
     
     private void outputdirButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_outputdirButtonActionPerformed
         final JFileChooser fc = new JFileChooser();
@@ -651,10 +659,12 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
             outputDirectory = folder.getPath();
             outputDirDisplay.setText(outputDirectory);
             saveOutputDirectory(outputDirectory);
+            outputWriter.setOutputDir(outputDirectory);
         }
     }//GEN-LAST:event_outputdirButtonActionPerformed
 
-    private void autoButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_autoButtonActionPerformed
+    private void autoButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:
+        updatePorts();
         // Начать сканирование портов и найти из них подходящий
         if(communicator.getAvailableComPorts().size() > 0) {
             setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
@@ -832,11 +842,7 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
             this.status = status;
             
             // Тут сразу скидывать в файл и обновлять счетчик строк
-            String result = packetProcessor.popResult();
-            if( result.length() > 0) {
-                writeNewFileToOutputDirectory(result, fileStarted);
-                fileStarted = true;
-            }
+            writeNewFileToOutputDirectory(packetProcessor.popResult());
         }
         else if(status == ConnectionStatus.Idle) {
             if(this.status == ConnectionStatus.Data) {
@@ -925,11 +931,9 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
                     break;
                 }
             }
-        } catch (ClassNotFoundException ex) {
+        } catch (ClassNotFoundException | IllegalAccessException ex) {
             java.util.logging.Logger.getLogger(ProbeGUI.class.getName()).log(java.util.logging.Level.SEVERE, null, ex);
         } catch (InstantiationException ex) {
-            java.util.logging.Logger.getLogger(ProbeGUI.class.getName()).log(java.util.logging.Level.SEVERE, null, ex);
-        } catch (IllegalAccessException ex) {
             java.util.logging.Logger.getLogger(ProbeGUI.class.getName()).log(java.util.logging.Level.SEVERE, null, ex);
         } catch (javax.swing.UnsupportedLookAndFeelException ex) {
             java.util.logging.Logger.getLogger(ProbeGUI.class.getName()).log(java.util.logging.Level.SEVERE, null, ex);
