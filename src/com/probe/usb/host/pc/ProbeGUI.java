@@ -94,12 +94,10 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
         Reading,
         Data,
         Idle
-    }
-    
+    }    
     private ConnectionStatus status = ConnectionStatus.Disconnected;
     
     private int locCounter = 0;
-    private boolean fileStarted = false;
     
     private List<String> commands = new ArrayList<String>();
     
@@ -578,7 +576,6 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
         dataFromFile = ((JCheckBox)evt.getSource()).isSelected();
         
         writeNewFileToOutputDirectory(packetProcessor.popResult());
-        fileStarted = false;
         
         datafileButton.setEnabled(dataFromFile);
         cboxPorts.setEnabled(!dataFromFile);
@@ -663,7 +660,7 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
         }
     }//GEN-LAST:event_outputdirButtonActionPerformed
 
-    private void autoButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:
+    private void autoButtonActionPerformed(java.awt.event.ActionEvent evt) {            
         updatePorts();
         // Начать сканирование портов и найти из них подходящий
         if(communicator.getAvailableComPorts().size() > 0) {
@@ -671,7 +668,7 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
             enableControls(false);
             checkAllPorts();
         }
-    }//GEN-LAST:event_autoButtonActionPerformed
+    }                                          
 
     private void selectCommandFileButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_selectCommandFileButtonActionPerformed
         // Выбрать файл с коммандами
@@ -710,18 +707,6 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
                     if(commands.get(i).contains("//"))
                         commands.set(i, commands.get(i).split("//")[0]);
                 }
-
-                /*Iterator<String> commandsIterator = commands.iterator();
-                
-                while(commandsIterator.hasNext()) {
-                    String nextCommand = commandsIterator.next();
-                    
-                    commandsIterator.
-                    
-                    //if(nextCommand.contains("//"))
-                    //    commandsIterator.set(nextCommand.split("//")[0]);
-                }*/
-                
             } catch (IOException ex) {
                 Logger.getLogger(ProbeGUI.class.getName()).log(Level.SEVERE, null, ex);
                 return;
@@ -863,6 +848,16 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
             
     public void onStatusIdle() {
         changeStatus(ConnectionStatus.Idle);
+    }
+    
+    public void onNewConfigMessage(final int[] packetData) {
+        String config_value = "";
+        
+        for(int nextbyte : packetData) {
+            config_value += String.format("%02X ", nextbyte);
+        }
+        
+        addNormalLine(config_value.trim());
     }
 
     private void addErrorLine(String line) {
@@ -1029,6 +1024,7 @@ interface StatusListener {
     public void onStatusReading();
     public void onStatusGotData();
     public void onStatusIdle();
+    public void onNewConfigMessage(final int[] packetData);
 }
 
 class StatusParserEventListener extends ParserEventListener implements ActionListener {
@@ -1073,6 +1069,9 @@ class StatusParserEventListener extends ParserEventListener implements ActionLis
     public void onNewSingleFrame(final int b1, final int b2) {}
     public void onExpectNewPacket(final FramePacket p) {}
     public void onPacketDataByte(final FramePacket p) {}    
+    public void onNewconfigParamMessage(final int[] packetData) {
+        listener.onNewConfigMessage(packetData);
+    }
 }
 
 class ComboItem {
