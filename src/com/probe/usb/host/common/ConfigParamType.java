@@ -1,5 +1,8 @@
 package com.probe.usb.host.common;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public enum ConfigParamType
 {  
     acc_odr                              ( 1,  1000,      true,  "Hz"),
@@ -29,5 +32,18 @@ public enum ConfigParamType
        this.max = max;
        this.writable = writable;
        this.unit = unit;
+    }
+
+    @Override
+    public String toString() {
+        return name() + " (" + Integer.toString(index) + (writable? " rw":" r") + (max == 1? " bool)" : ")");
+    }
+
+    public static ConfigParamType[] getWritable() {
+        List<ConfigParamType> types = new ArrayList<>();
+        for (ConfigParamType t: values())
+            if (t.writable)
+                types.add(t);
+        return types.toArray(new ConfigParamType[types.size()]);
     }
 }
