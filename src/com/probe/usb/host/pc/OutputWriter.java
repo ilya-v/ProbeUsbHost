@@ -50,8 +50,10 @@ public class OutputWriter {
         }
     }
 
-    public void forceNewFile() throws IOException {
-        closeFile();
+    public void forceNewFile() {
+        try {
+            closeFile();
+        } catch (IOException e) { /* do nothing */}
     }
 
     public void tick() throws IOException {
