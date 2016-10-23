@@ -1,79 +1,95 @@
 package com.probe.usb.host.pc;
 
-import com.probe.usb.host.common.ConfigParamType;
 import com.probe.usb.host.commander.ProbeUsbCommander;
+import com.probe.usb.host.parser.ParserEventListener;
 import com.probe.usb.host.parser.ProbeUsbParser;
 import com.probe.usb.host.parser.processor.PrintProcessor;
 import com.probe.usb.host.parser.processor.PrintProcessor.OutputElement;
 import com.probe.usb.host.parser.processor.TablePrintProcessor;
 
-import java.awt.Cursor;
+import java.awt.*;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.text.DateFormat;
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
 import java.util.*;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import java.util.List;
 import java.util.prefs.Preferences;
-import javax.swing.DefaultComboBoxModel;
-import javax.swing.JCheckBox;
-import javax.swing.JComboBox;
-import javax.swing.JFileChooser;
-
-import static com.probe.usb.host.common.ConfigCommand.*;
-import com.probe.usb.host.parser.ParserEventListener;
-import com.probe.usb.host.parser.internal.FramePacket;
-import java.awt.Color;
-import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
-import java.nio.charset.StandardCharsets;
-import java.util.prefs.BackingStoreException;
-import javax.swing.JOptionPane;
+import javax.swing.*;
 import javax.swing.Timer;
+import javax.swing.text.DefaultCaret;
 
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
+import com.probe.usb.host.pc.StatusListener.ConnectionStatus;
+import com.probe.usb.host.pc.plot.Plot;
+import com.probe.usb.host.pc.ui.CommandUiControl;
 
-/**
- *
- * @author chernov
- */
-public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receiver, CheckListener, StatusListener {
+import java.awt.event.ActionEvent;
+import java.nio.charset.StandardCharsets;
+
+public class ProbeGUI extends javax.swing.JFrame {
 
     public static ProbeGUI instance;
+    public static JFrame graph;
 
-    private Communicator communicator;
+    private javax.swing.JToggleButton autoButton;
+    private javax.swing.JToggleButton plotButton;
+    private javax.swing.JComboBox<String> cboxPorts;
 
-    private ComboItem selectedCommand;
-    private ComboItem selectedArgument;
 
-    private ProbeUsbCommander probeCommander = new ProbeUsbCommander();
+    private Logger logger = new Logger() {
+        @Override
+        void printLine(String line) { printToWindowLog(line);}
+    };
 
     private TablePrintProcessor packetProcessor = new TablePrintProcessor();
+
     private PrintProcessor printProcessor = new PrintProcessor()
             .disableOutputOf(OutputElement.DanglingPacket)
             .disableOutputOf(OutputElement.DataPacket);
 
+    private StatusListener statusEventListener = new StatusListener(this::changeStatus);
+
+    private ParserEventListener bytesAndFramesListener = new ParserEventListener() {
+        @Override public void onNewByte(final int b) {
+            statusEventListener.onNewByte(b);
+            portScanner.onNewByte(b);
+        }
+        @Override public void onNewFrame(final int b1, final int b2) {
+            statusEventListener.onNewFrame(b1, b2);
+            portScanner.onNewFrame(b1, b2);
+        }
+    };
+
     private ProbeUsbParser parser = new ProbeUsbParser()
+            .setListener(bytesAndFramesListener)
             .addPacketProcessor(packetProcessor)
             .addPacketProcessor(printProcessor);
+
+    private Communicator communicator = new Communicator()
+            .setLogger(logger::printLine)
+            .setListener(statusEventListener::onConnectionStatus)
+            .setReceiver(b -> {
+                parser.addByte(Byte.toUnsignedInt(b));
+                printToWindowLog( printProcessor.popResult() );
+                writeNewFileToOutputDirectory();
+            });
+
+    private ProbeUsbCommander probeCommander = new ProbeUsbCommander();
 
     private OutputWriter outputWriter = new OutputWriter()
             .setFileNamePrefix("accel-")
             .setOutputDir( getOutputDirectory() );
 
+    private PortScanner portScanner = new PortScanner(communicator)
+            .setLogger(logger::printLine)
+            .setEnabledInfo( () -> autoButton != null && autoButton.isSelected())
+            .setStatusListener( (connected, portName) -> {
+                cboxPorts.setSelectedItem(connected? portName : "");
+            });
 
-    private boolean dataFromFile = false;
-    
+    private CommandUiControl commandUiControl;
+
     private final String PREF_OUTPUTDIR_NAME = "preference_outputdir";
     private final String PREF_LASTFILE_NAME = "preference_lastfile";
     private final String PREF_DATAFILEDIR = "preference_datafiledir";
@@ -81,249 +97,131 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
     
     private String outputDirectory;
 
-    private Map<Integer, String> lastArguments = new HashMap<>();
-    
-    private TestParserEventListener testEventListener;
-    private StatusParserEventListener statusEventListener;
-    
-    private Deque<String> portsToCheck;
-    
-    private enum ConnectionStatus {
-        Disconnected,
-        Connected,
-        Reading,
-        Data,
-        Idle
-    }    
-    private ConnectionStatus status = ConnectionStatus.Disconnected;
-    
-    private int locCounter = 0;
-    
-    private List<String> commands = new ArrayList<String>();
-    
-    
-    public void setCommunicator(Communicator communicator) {
-        this.communicator = communicator;
-        this.communicator.setReceiver(this);
-        updatePorts();
+    private ConnectionStatus connectionStatus = ConnectionStatus.Disconnected;
+
+    private Timer timer = new Timer(1000, e -> {
+        List<String> portNames = new ArrayList<>();
+        if (connectionStatus == ConnectionStatus.Disconnected) {
+            portNames = communicator.searchForPorts();
+            String[] modelPorts = portNames.toArray(new String[portNames.size() + 1]);
+            modelPorts[portNames.size()] = "";
+
+            if (!cboxPorts.isPopupVisible()) {
+                final String portSelection = (String) (cboxPorts.getSelectedItem());
+                cboxPorts.setModel(new DefaultComboBoxModel<>(modelPorts));
+                cboxPorts.setSelectedItem(portSelection);
+            }
+        }
+        portScanner.onTimerTick(portNames);
+        statusEventListener.onTimerTick();
+        sendNextCommandLine();
+    } );
+    {
+        timer.start();
     }
 
-    public void updatePorts() {
-        cboxPorts.removeAllItems();
-        HashMap ports = this.communicator.getAvailableComPorts();
-        for (Object key : new TreeSet(ports.keySet())) {
-            cboxPorts.addItem((String)key);
-        }
-    }
+    private int locCounter = 0;
     
-    public void handle(byte data) {
-        parser.addByte(data);
-        final String logLine = printProcessor.popResult();
-        if (!logLine.isEmpty())
-            addNormalLine(logLine);
-    }
-    
-    /**
-     * Creates new form ProbeGUI
-     */
+    private Deque<byte[]> commands = new ArrayDeque<>();
+
+
     private ProbeGUI() {
         initComponents();
-        
-        getRootPane().setDefaultButton(sendButton);
-        
-        sendLog.setEditable(false);
-        
-        testEventListener = new TestParserEventListener(this);
-        statusEventListener = new StatusParserEventListener(this);
-        
+
+
         outputDirectory = getOutputDirectory();
         outputDirDisplay.setText(outputDirectory);
         
         lastSavedFileField.setText(getLastFileName());
 
-        
-        Vector modelPacketTypes = new Vector();
-        modelPacketTypes.addElement( new ComboItem(writeConfig.getFirstByte(), writeConfig.name() ) );
-        modelPacketTypes.addElement( new ComboItem(readConfig.getFirstByte(), readConfig.name()) );
-        modelPacketTypes.addElement( new ComboItem(accRegWrite.getFirstByte(), accRegWrite.name() ) );
-        modelPacketTypes.addElement( new ComboItem(accRegRead.getFirstByte(), accRegRead.name() ) );
-        modelPacketTypes.addElement( new ComboItem(setTimeHi.getFirstByte(), "setTimeHi, setTimeLo" ) );
-
-        cboxCommand.setModel(new DefaultComboBoxModel(modelPacketTypes));
-        
-        Vector modelArgumentTypes = new Vector();
-        
-        modelArgumentTypes.addElement( new ComboItem(ConfigParamType.selective_recording_mode.index, "selective_recording_mode" ) );
-        modelArgumentTypes.addElement( new ComboItem(ConfigParamType.streaming_mode.index, "streaming_mode" ) );
-        modelArgumentTypes.addElement( new ComboItem(ConfigParamType.use_bt_with_usb.index, "use_bt_with_usb" ) );
-        modelArgumentTypes.addElement( new ComboItem(ConfigParamType.snooze_detection_time.index, "snooze_detection_time" ) );
-        modelArgumentTypes.addElement( new ComboItem(ConfigParamType.snooze_threshold_acceleration.index, "snooze_threshold_acceleration" ) );
-        modelArgumentTypes.addElement( new ComboItem(ConfigParamType.activation_threshold_acceleration.index, "activation_threshold_acceleration" ) );
-        modelArgumentTypes.addElement( new ComboItem(ConfigParamType.sleep_detection_time.index, "sleep_detection_time" ) );
-        modelArgumentTypes.addElement( new ComboItem(ConfigParamType.sleep_threshold_acceleration.index, "sleep_threshold_acceleration" ) );
-        modelArgumentTypes.addElement( new ComboItem(ConfigParamType.shock_threshold_acceleration.index, "shock_threshold_acceleration" ) );
-        modelArgumentTypes.addElement( new ComboItem(ConfigParamType.rest_threshold_acceleration.index, "rest_threshold_acceleration" ) );
-        modelArgumentTypes.addElement( new ComboItem(ConfigParamType.rest_detection_time.index, "rest_detection_time" ) );
-        modelArgumentTypes.addElement( new ComboItem(ConfigParamType.accelerometer_status_reg.index, "accelerometer_status_reg" ) );
-        modelArgumentTypes.addElement( new ComboItem(ConfigParamType.vcc_voltage.index, "vcc_voltage" ) );
-        modelArgumentTypes.addElement( new ComboItem(ConfigParamType.vcc_nominal_voltage.index, "vcc_nominal_voltage" ) );
-        modelArgumentTypes.addElement( new ComboItem(ConfigParamType.charging_status.index, "charging_status" ) );
-        
-        cboxArgumentType.setModel(new DefaultComboBoxModel(modelArgumentTypes));
-        
-        selectedCommand = (ComboItem)cboxCommand.getSelectedItem();
-        selectedArgument = (ComboItem)cboxArgumentType.getSelectedItem();
-        
         this.addWindowListener(new WindowAdapter(){
             public void windowClosing(WindowEvent e){
-                if(communicator != null && communicator.isConnected())
-                    communicator.disconnect();
-
-                writeNewFileToOutputDirectory(packetProcessor.popResult());
+                communicator.disconnect();
             }
         });
     }
 
-    /**
-     * This method is called from within the constructor to initialize the form.
-     * WARNING: Do NOT modify this code. The content of this method is always
-     * regenerated by the Form Editor.
-     */
-    @SuppressWarnings("unchecked")
-    // <editor-fold defaultstate="collapsed" desc="Generated Code">//GEN-BEGIN:initComponents
     private void initComponents() {
 
-        jScrollPane1 = new javax.swing.JScrollPane();
-        jTextArea1 = new javax.swing.JTextArea();
         cboxPorts = new javax.swing.JComboBox<>();
-        jLabel1 = new javax.swing.JLabel();
-        jLabel2 = new javax.swing.JLabel();
+        labelComPortCaption = new javax.swing.JLabel();
+        labelCommand = new javax.swing.JLabel();
         cboxCommand = new javax.swing.JComboBox<>();
-        jLabel3 = new javax.swing.JLabel();
+        labelArgType = new javax.swing.JLabel();
         sendButton = new javax.swing.JButton();
         jScrollPane2 = new javax.swing.JScrollPane();
         sendLog = new javax.swing.JTextArea();
-        jLabel4 = new javax.swing.JLabel();
+        labelLogCaption = new javax.swing.JLabel();
         cboxArgumentType = new javax.swing.JComboBox<>();
         txtCommandArg = new javax.swing.JTextField();
-        jLabel5 = new javax.swing.JLabel();
-        jCheckBox1 = new javax.swing.JCheckBox();
+        labelArgValueCaption = new javax.swing.JLabel();
+        checkBoxFromDataFile = new javax.swing.JCheckBox();
         datafileButton = new javax.swing.JButton();
+        plotButton = new javax.swing.JToggleButton();
         jLabel6 = new javax.swing.JLabel();
         outputdirButton = new javax.swing.JButton();
         outputDirDisplay = new javax.swing.JTextField();
-        autoButton = new javax.swing.JButton();
-        jLabel7 = new javax.swing.JLabel();
+        autoButton = new javax.swing.JToggleButton("Auto Scan Ports", true);
+        labelConnectionStatus = new javax.swing.JLabel();
         connectionIndicator = new javax.swing.JButton();
-        jLabel8 = new javax.swing.JLabel();
+        lastSavedFileLabel = new javax.swing.JLabel();
         lastSavedFileField = new javax.swing.JTextField();
         locLabel = new javax.swing.JLabel();
         selectCommandFileButton = new javax.swing.JButton();
         performCommandsButton = new javax.swing.JButton();
+        checkBoxSaveAccOutput = new javax.swing.JCheckBox();
 
-        jTextArea1.setColumns(20);
-        jTextArea1.setRows(5);
-        jScrollPane1.setViewportView(jTextArea1);
-
-        setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
-
-        cboxPorts.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent evt) {
-                cboxPortsActionPerformed(evt);
-            }
-        });
-
-        jLabel1.setText("COM Port");
-
-        jLabel2.setText("Команда");
-
-        cboxCommand.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent evt) {
-                cboxCommandActionPerformed(evt);
-            }
-        });
-
-        jLabel3.setText("Тип аргумента");
-
-        sendButton.setText("Отправить");
-        sendButton.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent evt) {
-                sendButtonActionPerformed(evt);
-            }
-        });
-
+        sendButton.setText("Send Command");
+        labelComPortCaption.setText("COM Port");
+        labelCommand.setText("Command");
+        labelArgType.setText("Argument Type");
         sendLog.setColumns(20);
         sendLog.setRows(5);
         jScrollPane2.setViewportView(sendLog);
-
-        jLabel4.setText("Лог отправки:");
-
-        cboxArgumentType.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent evt) {
-                cboxArgumentTypeActionPerformed(evt);
-            }
-        });
-
-        jLabel5.setText("Значение");
-
-        jCheckBox1.setText("Из файла");
-        jCheckBox1.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent evt) {
-                jCheckBox1ActionPerformed(evt);
-            }
-        });
-
-        datafileButton.setText("Выбрать файл ...");
-        datafileButton.setEnabled(false);
-        datafileButton.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent evt) {
-                datafileButtonActionPerformed(evt);
-            }
-        });
-
-        jLabel6.setText("Папка для сохранения файлов : ");
-
-        outputdirButton.setText("Выбрать ...");
-        outputdirButton.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent evt) {
-                outputdirButtonActionPerformed(evt);
-            }
-        });
-
-        outputDirDisplay.setEditable(false);
-
-        autoButton.setText("Авто");
-        autoButton.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent evt) {
-                autoButtonActionPerformed(evt);
-            }
-        });
-
-        jLabel7.setText("Статус соединения : ");
-
-        connectionIndicator.setText("disconnected");
-        connectionIndicator.setEnabled(false);
-
-        jLabel8.setText("Последний сохраненый файл :");
-
-        lastSavedFileField.setEditable(false);
-
-        locLabel.setText("        ");
-
-        selectCommandFileButton.setText("Открыть файл с командами настройки");
-        selectCommandFileButton.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent evt) {
-                selectCommandFileButtonActionPerformed(evt);
-            }
-        });
-
-        performCommandsButton.setText("Выполнить команды");
+        labelLogCaption.setText("Log");
+        labelArgValueCaption.setText("Value");
+        plotButton.setText("Plot");
+        performCommandsButton.setText("Execute Commands");
         performCommandsButton.setEnabled(false);
-        performCommandsButton.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent evt) {
-                performCommandsButtonActionPerformed(evt);
-            }
-        });
+        datafileButton.setText("Choose File...");
+        datafileButton.setEnabled(false);
+        jLabel6.setText("Directory for output files:");
+        outputdirButton.setText("Choose...");
+        labelConnectionStatus.setText("Connection Status:");
+        connectionIndicator.setText("disconnected");
+        checkBoxFromDataFile.setText("Read From File");
+        outputDirDisplay.setEditable(false);
+        connectionIndicator.setEnabled(false);
+        lastSavedFileLabel.setText("Last Saved File:");
+        lastSavedFileField.setEditable(false);
+        locLabel.setText("        ");
+        selectCommandFileButton.setText("Open Command File");
+        sendLog.setEditable(false);
+        cboxPorts.setEnabled( !autoButton.isSelected() );
+        cboxPorts.setEditable(true);
+        checkBoxSaveAccOutput.setText("Save Acceleraions");
+
+        DefaultCaret caret = (DefaultCaret)sendLog.getCaret();
+        caret.setUpdatePolicy(DefaultCaret.ALWAYS_UPDATE);
+
+        setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
+
+
+        checkBoxFromDataFile.addActionListener(this::checkBoxFromDataFileActionPerformed);
+
+        commandUiControl = new CommandUiControl(cboxCommand, cboxArgumentType, txtCommandArg, sendButton)
+                .setCommander(probeCommander)
+                .setCommandListener(this::onCommandAdded);
+
+        cboxPorts.addActionListener(this::cboxPortsActionPerformed);
+
+        datafileButton.addActionListener(this::datafileButtonActionPerformed);
+        autoButton.addActionListener(this::autoButtonActionPerformed);
+
+        outputdirButton.addActionListener(this::outputdirButtonActionPerformed);
+        plotButton.addActionListener(this::plotButtonActionPerformed);
+        selectCommandFileButton.addActionListener(this::selectCommandFileButtonActionPerformed);
+        performCommandsButton.addActionListener(this::performCommandsButtonActionPerformed);
 
         javax.swing.GroupLayout layout = new javax.swing.GroupLayout(getContentPane());
         getContentPane().setLayout(layout);
@@ -334,29 +232,32 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                     .addComponent(jScrollPane2)
                     .addGroup(layout.createSequentialGroup()
-                        .addComponent(jLabel1, javax.swing.GroupLayout.PREFERRED_SIZE, 87, javax.swing.GroupLayout.PREFERRED_SIZE)
-                        .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
+                        .addComponent(labelComPortCaption, javax.swing.GroupLayout.PREFERRED_SIZE, 87, javax.swing.GroupLayout.PREFERRED_SIZE)
                         .addComponent(cboxPorts, javax.swing.GroupLayout.PREFERRED_SIZE, 124, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addComponent(autoButton)
                         .addGap(0, 0, Short.MAX_VALUE)
-                        .addComponent(datafileButton))
+                        .addComponent(checkBoxFromDataFile)
+                        .addComponent(datafileButton)
+                        .addGap(0, 0, Short.MAX_VALUE)
+                        .addComponent(plotButton))
                     .addGroup(layout.createSequentialGroup()
                         .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                             .addGroup(layout.createSequentialGroup()
                                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                                     .addComponent(cboxCommand, javax.swing.GroupLayout.PREFERRED_SIZE, 233, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                    .addComponent(jLabel2))
+                                    .addComponent(labelCommand))
                                 .addGap(20, 20, 20)
                                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                                     .addComponent(cboxArgumentType, javax.swing.GroupLayout.PREFERRED_SIZE, 244, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                    .addComponent(jLabel3)
+                                    .addComponent(labelArgType)
                                     .addComponent(performCommandsButton))
                                 .addGap(18, 18, 18)
                                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                                     .addComponent(txtCommandArg)
                                     .addGroup(layout.createSequentialGroup()
                                         .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                                            .addComponent(jCheckBox1, javax.swing.GroupLayout.PREFERRED_SIZE, 150, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                            .addComponent(jLabel5))
+                                            .addComponent(checkBoxFromDataFile, javax.swing.GroupLayout.PREFERRED_SIZE, 150, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                            .addComponent(labelArgValueCaption))
                                         .addGap(0, 79, Short.MAX_VALUE))))
                             .addGroup(layout.createSequentialGroup()
                                 .addComponent(jLabel6)
@@ -365,11 +266,11 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
                             .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING)
                                 .addComponent(autoButton, javax.swing.GroupLayout.PREFERRED_SIZE, 84, javax.swing.GroupLayout.PREFERRED_SIZE)
                                 .addGroup(javax.swing.GroupLayout.Alignment.LEADING, layout.createSequentialGroup()
-                                    .addComponent(jLabel7)
+                                    .addComponent(labelConnectionStatus) ////
                                     .addGap(18, 18, 18)
                                     .addComponent(connectionIndicator, javax.swing.GroupLayout.PREFERRED_SIZE, 200, javax.swing.GroupLayout.PREFERRED_SIZE)))
                             .addGroup(layout.createSequentialGroup()
-                                .addComponent(jLabel8)
+                                .addComponent(lastSavedFileLabel)
                                 .addGap(35, 35, 35)
                                 .addComponent(lastSavedFileField)))
                         .addGap(18, 18, 18)
@@ -381,7 +282,7 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
                             .addComponent(outputdirButton, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)))
                     .addGroup(layout.createSequentialGroup()
                         .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                            .addComponent(jLabel4)
+                            .addComponent(labelLogCaption)
                             .addComponent(selectCommandFileButton, javax.swing.GroupLayout.PREFERRED_SIZE, 233, javax.swing.GroupLayout.PREFERRED_SIZE))
                         .addGap(0, 0, Short.MAX_VALUE)))
                 .addContainerGap())
@@ -394,21 +295,23 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
                         .addGap(19, 19, 19)
                         .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                             .addComponent(cboxPorts, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                            .addComponent(jLabel1)
-                            .addComponent(jCheckBox1)
+                            .addComponent(labelComPortCaption)
+                            .addComponent(checkBoxFromDataFile)
                             .addComponent(datafileButton)
-                            .addComponent(autoButton))
+                            .addComponent(autoButton)
+                            .addComponent(plotButton))
                         .addGap(18, 18, 18)
                         .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                            .addComponent(jLabel7)
+                            .addComponent(labelConnectionStatus) ////
                             .addComponent(connectionIndicator))
+                            //.addComponent(checkBoxSaveAccOutput)
                         .addGap(48, 48, 48))
                     .addGroup(javax.swing.GroupLayout.Alignment.TRAILING, layout.createSequentialGroup()
                         .addContainerGap()
                         .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                            .addComponent(jLabel2)
-                            .addComponent(jLabel3)
-                            .addComponent(jLabel5))
+                            .addComponent(labelCommand)
+                            .addComponent(labelArgType)
+                            .addComponent(labelArgValueCaption))
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)))
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                     .addComponent(cboxCommand, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
@@ -426,172 +329,87 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
                     .addComponent(outputdirButton))
                 .addGap(18, 18, 18)
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                    .addComponent(jLabel8)
+                    .addComponent(lastSavedFileLabel)
                     .addComponent(lastSavedFileField, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
                     .addComponent(locLabel))
                 .addGap(18, 18, 18)
-                .addComponent(jLabel4)
+                .addComponent(labelLogCaption)
                 .addGap(18, 18, 18)
                 .addComponent(jScrollPane2, javax.swing.GroupLayout.DEFAULT_SIZE, 396, Short.MAX_VALUE)
                 .addContainerGap())
         );
 
         pack();
-    }// </editor-fold>//GEN-END:initComponents
 
-    private void sendButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_sendButtonActionPerformed
-        // Отправка команды
-        final String argval = txtCommandArg.getText();
-        final int fb = selectedCommand.getVal();
+        getRootPane().setDefaultButton(sendButton);
+    }
 
-        lastArguments.put(fb, argval);
+    private void onCommandAdded(ProbeUsbCommander probeCommander) {
 
-        if(fb == accRegRead.getFirstByte()) {
-            int regAdress = Integer.parseInt(argval);
-            probeCommander.deviceAccRegRead(regAdress);
-        }
-        else if (fb == accRegWrite.getFirstByte()) {
-            String[] values = argval.split(" ");
-            int regAdress = Integer.parseInt(values[0]);
-            int regValue = Integer.parseInt(values[1]);
-            probeCommander.deviceAccRegWrite(regAdress, regValue);
-        }
-        else if (fb == readConfig.getFirstByte()) {
-            ConfigParamType selected = selectedParamType();
-            probeCommander.deviceReadConfig(selected);
-        }
-        else if (fb == setTimeHi.getFirstByte()) {
-            DateFormat df = new SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.ENGLISH);
-            try {
-                Date result = df.parse(argval);
-                probeCommander.deviceSetTime(result);
-            } catch (ParseException ex) {
-                addErrorLine("Неверный формат даты");
-            }
-        }
-        else if (fb == writeConfig.getFirstByte()) {
-            ConfigParamType selected = selectedParamType();
-            try {
-                probeCommander.deviceWriteConfig(selected, (Object) argval);
-            }  catch (NumberFormatException ex) {
-                addErrorLine("Неверный формат aргумента: <" + argval + ">");
-            }
-        }
-        
         int output;
         String line = "";
-        List<Byte> bytes = new ArrayList<>();
-        
-        while((output = probeCommander.popOutputByte()) != -1) {
-            bytes.add((byte)output);
-            line += String.format("%02X ", output);
+        ArrayList<Byte> bytes = new ArrayList<>();
+
+        while ((output = probeCommander.popOutputByte()) != -1) {
+            bytes.add((byte) output);
+            line += String.format("%02X ", Byte.toUnsignedInt(bytes.get(bytes.size()-1)));
         }
-        
-        if(bytes.size() > 0 && bytes.size() % 4 == 0) {
+
+        if (bytes.size() > 0 && bytes.size() % 4 == 0) {
             byte[] arrBytes = new byte[bytes.size()];
-            for (int i =0; i < arrBytes.length; i++)
+            for (int i = 0; i < arrBytes.length; i++)
                 arrBytes[i] = bytes.get(i);
             if (communicator != null)
                 communicator.writeData(arrBytes);
-            addNormalLine(line);
-        }
-        else if (bytes.size() > 0){
+            printToWindowLog(line);
+        } else if (bytes.size() > 0) {
             addErrorLine(line + " cannot be sent");
         }
-    }//GEN-LAST:event_sendButtonActionPerformed
-
-    private  ConfigParamType selectedParamType() {
-        ConfigParamType cptype = ConfigParamType.acc_odr;
-                
-        for (ConfigParamType nextType : ConfigParamType.values()) {
-            if(selectedArgument.getVal() == nextType.index) {
-                cptype = nextType;
-                break;
-            }
-        }
-
-        return cptype;
     }
-    
-    private void cboxArgumentTypeActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_cboxArgumentTypeActionPerformed
-        // Изменен тип аргумента
-        JComboBox comboBox = (JComboBox)evt.getSource();
-        selectedArgument = (ComboItem)comboBox.getSelectedItem();
-    }//GEN-LAST:event_cboxArgumentTypeActionPerformed
 
-    private void cboxPortsActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_cboxPortsActionPerformed
-        // Выбран порт, пробуем подключиться к нему
+
+    private void cboxPortsActionPerformed(ActionEvent evt) {
+        if (autoButton.isSelected() || checkBoxFromDataFile.isSelected())
+            return;
+
+        if (!communicator.getPortName().isEmpty())
+            printToWindowLog("Disconnected from " + communicator.getPortName());
+        communicator.disconnect();
+
+        if (cboxPorts.getSelectedItem() == null)
+            return;
+
         String port = String.valueOf(cboxPorts.getSelectedItem());
-        
-        if(communicator.isConnected()) {
-            communicator.disconnect();
-            changeStatus(ConnectionStatus.Disconnected);
-        }
-        
-        int result = communicator.connect(port);
-        
-        if(Communicator.CONNECTION_OK == result) {
-            addNormalLine("Connection OK");
-            changeStatus(ConnectionStatus.Connected);
-            parser.setListener(statusEventListener);
-            statusEventListener.startCheck();
-        }
-        else if(Communicator.CONNECTION_FAILED == result) {
-            addErrorLine("FAILED to open " + port);
-        }
-        else if(Communicator.CONNECTION_CONNECTED == result) {
-            addNormalLine(port + " is in use.");
-        }
-         
-        if (communicator.isConnected()) {
-            if (communicator.initIOStream()) {
-                communicator.initListener();
-            }
-        }
-    }//GEN-LAST:event_cboxPortsActionPerformed
 
-    private void cboxCommandActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_cboxCommandActionPerformed
-        // Измененен тип сообщения
-        JComboBox comboBox = (JComboBox)evt.getSource();
-        selectedCommand = (ComboItem)comboBox.getSelectedItem();
-        
-        if(selectedCommand.getVal() != writeConfig.getFirstByte() && selectedCommand.getVal() != readConfig.getFirstByte()) {
-            cboxArgumentType.setEnabled(false);
-        }
-        else {
-            cboxArgumentType.setEnabled(true);
-        }
+        if (!port.isEmpty() && communicator.connect(port))
+            printToWindowLog("Connected to " + communicator.getPortName());
+    }
 
-        if (selectedCommand.getVal() == setTimeHi.getFirstByte())
-        {
-            String date = new SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.ENGLISH).format(new Date());
-            txtCommandArg.setText(date);
-        }
-        else if (lastArguments.containsKey(selectedCommand.getVal())) {
-            txtCommandArg.setText(lastArguments.get(selectedCommand.getVal()));
-        }
-    }//GEN-LAST:event_cboxCommandActionPerformed
 
-    private void jCheckBox1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jCheckBox1ActionPerformed
-        dataFromFile = ((JCheckBox)evt.getSource()).isSelected();
-        
-        writeNewFileToOutputDirectory(packetProcessor.popResult());
-        
+    private void checkBoxFromDataFileActionPerformed(ActionEvent evt) {
+        final boolean dataFromFile = ((JCheckBox) evt.getSource()).isSelected();
         datafileButton.setEnabled(dataFromFile);
         cboxPorts.setEnabled(!dataFromFile);
-        cboxCommand.setEnabled(!dataFromFile);
-        cboxArgumentType.setEnabled(!dataFromFile);
-        txtCommandArg.setEnabled(!dataFromFile);
-        sendButton.setEnabled(!dataFromFile);
+        commandUiControl.setEnabled(!dataFromFile && connectionStatus != ConnectionStatus.Disconnected);
         autoButton.setEnabled(!dataFromFile);
-        
-        if(!dataFromFile) {
-            parser.setListener(statusEventListener);
-            statusEventListener.startCheck();
+        autoButton.setSelected(!dataFromFile && autoButton.isSelected());
+        if (dataFromFile) {
+            if (!communicator.getPortName().isEmpty())
+                printToWindowLog("Disconnected from " + communicator.getPortName());
+            communicator.disconnect();
         }
-    }//GEN-LAST:event_jCheckBox1ActionPerformed
+    }
 
-    private void datafileButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_datafileButtonActionPerformed
+    private void autoButtonActionPerformed(ActionEvent evt) {
+        cboxPorts.setEnabled( !autoButton.isSelected() );
+        if (autoButton.isSelected()) {
+            if (!communicator.getPortName().isEmpty())
+                printToWindowLog("Disconnected from " + communicator.getPortName());
+            communicator.disconnect();
+        }
+    }
+
+    private void datafileButtonActionPerformed(ActionEvent evt) {//GEN-FIRST:event_datafileButtonActionPerformed
         // Выбрать файл для чтения
         final JFileChooser fc = new JFileChooser();
         int returnVal = fc.showOpenDialog(ProbeGUI.this);
@@ -603,32 +421,28 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
             try {
                 fileData = Files.readAllBytes(file.toPath());
             } catch (IOException ex) {
-                Logger.getLogger(ProbeGUI.class.getName()).log(Level.SEVERE, null, ex);
+                logger.printLine(ex.toString());
                 return;
             }
-            
-            parser.setListener(new ParserEventListener());
-            packetProcessor.popResult();
-            
-            setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+
             for (int b: fileData) {
                 parser.addByte(b);
             }
-            
-            // Записать результат парсинга в файл
-            writeNewFileToOutputDirectory(packetProcessor.popResult());
-            setCursor(Cursor.getDefaultCursor());
+
+            outputWriter.forceNewFile();
+            writeNewFileToOutputDirectory();
         }
     }//GEN-LAST:event_datafileButtonActionPerformed
 
-    private void writeNewFileToOutputDirectory(String data) {
+    private void writeNewFileToOutputDirectory() {
+        final String data = packetProcessor.popResult();
         if (data.isEmpty())
             return;
         try {
             outputWriter.write(data);
         }
         catch (IOException e) {
-            Logger.getLogger(ProbeGUI.class.getName()).log(Level.SEVERE, null, e);
+            logger.printLine(e.toString());
         }
 
         if (outputWriter.getCurrentFileName() == null)
@@ -642,11 +456,11 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
         }
 
         locCounter += data.split("\r\n|\r|\n").length;
-        locLabel.setText(Integer.toString(locCounter) + " строк");
+        locLabel.setText(Integer.toString(locCounter) + " lines");
     }
 
     
-    private void outputdirButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_outputdirButtonActionPerformed
+    private void outputdirButtonActionPerformed(ActionEvent evt) {//GEN-FIRST:event_outputdirButtonActionPerformed
         final JFileChooser fc = new JFileChooser();
         fc.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
         int returnVal = fc.showSaveDialog(ProbeGUI.this);
@@ -660,27 +474,19 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
         }
     }//GEN-LAST:event_outputdirButtonActionPerformed
 
-    private void autoButtonActionPerformed(java.awt.event.ActionEvent evt) {            
-        updatePorts();
-        // Начать сканирование портов и найти из них подходящий
-        if(communicator.getAvailableComPorts().size() > 0) {
-            setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
-            enableControls(false);
-            checkAllPorts();
-        }
-    }                                          
+    private void plotButtonActionPerformed(ActionEvent evt) {
+        graph.setVisible(plotButton.isSelected());
+    }
 
-    private void selectCommandFileButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_selectCommandFileButtonActionPerformed
-        // Выбрать файл с коммандами
+    private void selectCommandFileButtonActionPerformed(ActionEvent evt) {//GEN-FIRST:event_selectCommandFileButtonActionPerformed
         String configDir = getConfigFileDirectory();    // предыдущая директория
-        commands.clear();
         
         final JFileChooser fc = new JFileChooser(configDir);
         int returnVal = fc.showOpenDialog(ProbeGUI.this);
 
         if (returnVal == JFileChooser.APPROVE_OPTION) {
             File file = fc.getSelectedFile();
-            addNormalLine("CONFIG : " + file.getAbsolutePath());
+            printToWindowLog("CONFIG : " + file.getAbsolutePath());
             
             String path = file.getParent();
             if(path != null) {
@@ -689,26 +495,21 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
             
             try {
                 List<String> lines = Files.readAllLines(file.toPath(), StandardCharsets.UTF_8);
-                
-                for(String line : lines) {
-                    if(line.contains("CRLF")) {
-                        String [] parts = line.split("CRLF");
-                        
-                        for(String part : parts) {
-                            commands.add(part);
+                for (String  line : lines) {
+                    final String[] cmdBytes = line.split("//", 1)[0].trim().split("\\s+");
+                    if (cmdBytes.length > 0) {
+                        byte[] bytes = new byte[cmdBytes.length];
+                        int i = 0;
+                        for (String b: cmdBytes) {
+                            bytes[i] = Byte.parseByte(b, 16);
+                            i++;
                         }
-                    }
-                    else {
-                        commands.add(line);
+                        commands.add(bytes);
                     }
                 }
-
-                for (int i = 0; i < commands.size(); i++) {
-                    if(commands.get(i).contains("//"))
-                        commands.set(i, commands.get(i).split("//")[0]);
-                }
-            } catch (IOException ex) {
-                Logger.getLogger(ProbeGUI.class.getName()).log(Level.SEVERE, null, ex);
+            } catch (Exception ex) {
+                logger.printLine(ex.toString());
+                commands.clear();
                 return;
             }  
             
@@ -716,155 +517,54 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
         }
     }//GEN-LAST:event_selectCommandFileButtonActionPerformed
 
-    private void performCommandsButtonActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_performCommandsButtonActionPerformed
-        setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+    private void performCommandsButtonActionPerformed(ActionEvent evt) {//GEN-FIRST:event_performCommandsButtonActionPerformed
         performCommandsButton.setEnabled(false);
         sendNextCommandLine();
     }//GEN-LAST:event_performCommandsButtonActionPerformed
 
     private void sendNextCommandLine() {
-        String command = commands.get(0);
-        commands.remove(0);
-        
-        String [] byte_codes = command.split(" ");
+        String logLine = "";
+        byte[] bytes = commands.pollFirst();
+        if (bytes == null)
+            return;
+        for (byte b: bytes) {
+            communicator.writeData(new byte [] {b});
+            logLine += Integer.toHexString(Byte.toUnsignedInt(b)) + " ";
+        }
+        printToWindowLog(logLine);
+    }
 
-        for(String byte_code : byte_codes) {
-            if(byte_code.length() > 0 ) {
-                byte nextByte = Byte.parseByte(byte_code, 16);
-                communicator.writeData(new byte [] {nextByte});
-            }
-        }
-        addNormalLine(command.trim());  
-        
-        // Перерыв между коммандами по секунде
-        if(commands.size() > 0) {
-            Timer timer = new Timer(1000, new ActionListener() {
-                @Override
-                public void actionPerformed(ActionEvent e) {
-                    sendNextCommandLine();
-                }
-            });
-            timer.setRepeats(false);
-            timer.start();
-        }
-        else {
-            setCursor(Cursor.getDefaultCursor());
-        }
-    }
-    
-    private void checkAllPorts() {
-        communicator.disconnect();
-        parser.setListener(testEventListener);        
-        portsToCheck = new ArrayDeque<>();
-        portsToCheck.addAll(communicator.getAvailableComPorts().keySet());
-        checkNextPort();
-    }
-    
-    private void checkNextPort() {
-        String port = portsToCheck.peek();
-        
-        if(port != null) {
-            // проверить что:
-            // 1. порт открывается и с него поступают данные
-            // 2. накопить некоторое количество данных (100 байт) и с помощью нового ProbeUsbParser проверить, что в них есть пакеты фреймов хоть какого-нибудь типа, кроме Dangling/Single Frame.
-            // при выполнении условий - вернуть true
-            if(communicator.connect(port) != Communicator.CONNECTION_OK)
-                onCheckFail();
-            
-            if (communicator.isConnected()) {
-                if (communicator.initIOStream()) {
-                    communicator.initListener();
-                }
-            }
-
-            testEventListener.startCheck();
-        }
-    }
-    
-    public void onCheckOK() {
-        String port = portsToCheck.pop();
-        parser.setListener(statusEventListener);
-        statusEventListener.startCheck();
-        setCursor(Cursor.getDefaultCursor());
-        cboxPorts.setSelectedItem(port);
-        enableControls(true);
-    }
-    
-    public void onCheckFail() {
-        communicator.disconnect();
-        portsToCheck.pop();
-        if(portsToCheck.peek() != null) {
-            checkNextPort();
-        }
-        else {
-            enableControls(true);
-            setCursor(Cursor.getDefaultCursor());
-            JOptionPane.showMessageDialog(this, "Устройство не найдено");
-        }
-    }
-    
     private void changeStatus(ConnectionStatus status) {
+        connectionStatus = status;
+        commandUiControl.setEnabled( !checkBoxFromDataFile.isSelected() && status != ConnectionStatus.Disconnected );
         if(status == ConnectionStatus.Disconnected) {
             connectionIndicator.setForeground(Color.red);
             connectionIndicator.setText("DISCONNECTED");
-            this.status = status;
         }
         else if(status == ConnectionStatus.Connected) {
             connectionIndicator.setForeground(Color.black);
-            connectionIndicator.setText("CONNECTED");
-            this.status = status;
+            connectionIndicator.setText("PORT OPEN");
         }
         else if(status == ConnectionStatus.Reading) {
-            if(this.status == ConnectionStatus.Connected) {
-                connectionIndicator.setForeground(new Color(0.4f, 0.7f, 0.6f));
-                connectionIndicator.setText("READING BYTES ...");
-                this.status = status;
-            }
+            connectionIndicator.setForeground(new Color(0.4f, 0.7f, 0.6f));
+            connectionIndicator.setText("READING INPUT...");
         }
         else if(status == ConnectionStatus.Data) {
             connectionIndicator.setForeground(new Color(0.4f, 0.7f, 0.6f));
-            connectionIndicator.setText("DATA ...");
-            this.status = status;
-            
-            // Тут сразу скидывать в файл и обновлять счетчик строк
-            writeNewFileToOutputDirectory(packetProcessor.popResult());
+            connectionIndicator.setText("RECEIVING DATA");
         }
         else if(status == ConnectionStatus.Idle) {
-            if(this.status == ConnectionStatus.Data) {
-                connectionIndicator.setForeground(Color.black);
-                connectionIndicator.setText("IDLE");
-                this.status = status;
-            }
+            connectionIndicator.setForeground(Color.black);
+            connectionIndicator.setText("IDLE");
         }
-    }
-    
-    public void onStatusReading() {
-        changeStatus(ConnectionStatus.Reading);
-    }
-    
-    public void onStatusGotData() {
-        changeStatus(ConnectionStatus.Data);
-    }
-            
-    public void onStatusIdle() {
-        changeStatus(ConnectionStatus.Idle);
-    }
-    
-    public void onNewConfigMessage(final int[] packetData) {
-        String config_value = "";
-        
-        for(int nextbyte : packetData) {
-            config_value += String.format("%02X ", nextbyte);
-        }
-        
-        addNormalLine(config_value.trim());
     }
 
     private void addErrorLine(String line) {
         sendLog.append("ERROR : " + line + "\n");        
     }
     
-    private void addNormalLine(String line) {
+    private void printToWindowLog(String line) {
+        if (line.isEmpty()) return;
         sendLog.append(line + "\n");        
     }
 
@@ -881,7 +581,7 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
     
     private String getLastFileName() {
         Preferences prefs = Preferences.userNodeForPackage(ProbeGUI.class);
-        String defaultValue = System.getProperty("нет");
+        String defaultValue = System.getProperty("none");
         return prefs.get(PREF_LASTFILE_NAME, defaultValue);        
     }
     
@@ -903,16 +603,11 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
     
     private void enableControls(boolean enable) {
         cboxPorts.setEnabled(enable);
-        cboxCommand.setEnabled(enable);
-        cboxArgumentType.setEnabled(enable);
-        txtCommandArg.setEnabled(enable);
-        sendButton.setEnabled(enable);
         autoButton.setEnabled(enable);
+        commandUiControl.setEnabled(enable);
     }
         
-    /**
-     * @param args the command line arguments
-     */
+
     public static void main(String args[]) {
         /* Set the Nimbus look and feel */
         //<editor-fold defaultstate="collapsed" desc=" Look and feel setting code (optional) ">
@@ -926,44 +621,31 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
                     break;
                 }
             }
-        } catch (ClassNotFoundException | IllegalAccessException ex) {
-            java.util.logging.Logger.getLogger(ProbeGUI.class.getName()).log(java.util.logging.Level.SEVERE, null, ex);
-        } catch (InstantiationException ex) {
-            java.util.logging.Logger.getLogger(ProbeGUI.class.getName()).log(java.util.logging.Level.SEVERE, null, ex);
-        } catch (javax.swing.UnsupportedLookAndFeelException ex) {
+        } catch (ClassNotFoundException | IllegalAccessException | javax.swing.UnsupportedLookAndFeelException | InstantiationException ex) {
             java.util.logging.Logger.getLogger(ProbeGUI.class.getName()).log(java.util.logging.Level.SEVERE, null, ex);
         }
         //</editor-fold>
         
         instance = new ProbeGUI();
-        
-        /* Create and display the form */
-        java.awt.EventQueue.invokeLater(new Runnable() {
-            public void run() {
-                instance.setVisible(true);
-            }
-        });
+        graph = new Plot();
+
+        java.awt.EventQueue.invokeLater(() -> instance.setVisible(true));
     }
 
-    // Variables declaration - do not modify//GEN-BEGIN:variables
-    private javax.swing.JButton autoButton;
     private javax.swing.JComboBox<String> cboxArgumentType;
     private javax.swing.JComboBox<String> cboxCommand;
-    private javax.swing.JComboBox<String> cboxPorts;
     private javax.swing.JButton connectionIndicator;
     private javax.swing.JButton datafileButton;
-    private javax.swing.JCheckBox jCheckBox1;
-    private javax.swing.JLabel jLabel1;
-    private javax.swing.JLabel jLabel2;
-    private javax.swing.JLabel jLabel3;
-    private javax.swing.JLabel jLabel4;
-    private javax.swing.JLabel jLabel5;
+    private javax.swing.JCheckBox checkBoxFromDataFile;
+    private javax.swing.JLabel labelComPortCaption;
+    private javax.swing.JLabel labelCommand;
+    private javax.swing.JLabel labelArgType;
+    private javax.swing.JLabel labelLogCaption;
+    private javax.swing.JLabel labelArgValueCaption;
     private javax.swing.JLabel jLabel6;
-    private javax.swing.JLabel jLabel7;
-    private javax.swing.JLabel jLabel8;
-    private javax.swing.JScrollPane jScrollPane1;
+    private javax.swing.JLabel labelConnectionStatus;
+    private javax.swing.JLabel lastSavedFileLabel;
     private javax.swing.JScrollPane jScrollPane2;
-    private javax.swing.JTextArea jTextArea1;
     private javax.swing.JTextField lastSavedFileField;
     private javax.swing.JLabel locLabel;
     private javax.swing.JTextField outputDirDisplay;
@@ -973,125 +655,7 @@ public class ProbeGUI extends javax.swing.JFrame implements Communicator.Receive
     private javax.swing.JButton sendButton;
     private javax.swing.JTextArea sendLog;
     private javax.swing.JTextField txtCommandArg;
+
+    private javax.swing.JCheckBox checkBoxSaveAccOutput;
     // End of variables declaration//GEN-END:variables
-}
-
-interface CheckListener {
-    public void onCheckOK();
-    public void onCheckFail();
-}
-
-class TestParserEventListener extends ParserEventListener implements ActionListener {
-    
-    private CheckListener listener; 
-    
-    private boolean gotFrames = false;
-    
-    public TestParserEventListener(CheckListener listener) {
-        this.listener = listener;
-    }
-    
-    public void startCheck() {
-        gotFrames = false;
-        Timer timer = new Timer( 2000, this);
-        timer.setRepeats(false);
-        timer.start(); 
-    }
-    
-    public void actionPerformed(ActionEvent e) {
-        if(gotFrames) {
-            listener.onCheckOK();
-            return;
-        }
-                
-        listener.onCheckFail();
-    }
-    
-    public void onNewByte(final int b) {
-    }
-    public void onSync(final int[] bytes, final int nBytesInSync) {}
-    public void onNewFrame(final int b1, final int b2) {
-        gotFrames = true;
-    }
-    public void onNewDataPacket(final int[] packetData) {}
-    public void onNewTimePacket(final int[] packetData) {}
-    public void onNewSingleFrame(final int b1, final int b2) {}
-    public void onExpectNewPacket(final FramePacket p) {}
-    public void onPacketDataByte(final FramePacket p) {}
-}
-
-interface StatusListener {
-    public void onStatusReading();
-    public void onStatusGotData();
-    public void onStatusIdle();
-    public void onNewConfigMessage(final int[] packetData);
-}
-
-class StatusParserEventListener extends ParserEventListener implements ActionListener {
-    
-    private StatusListener listener; 
-    private boolean checking  = false;
-    private boolean gotFrames = false;
-    
-    public StatusParserEventListener(StatusListener listener) {
-        this.listener = listener;
-    }
-    
-    public void startCheck() {
-        if(!checking) {
-            gotFrames = false;
-            checking = true;
-            Timer timer = new Timer( 1000, this);
-            timer.setRepeats(false);
-            timer.start(); 
-        }
-    }
-    
-    public void actionPerformed(ActionEvent e) {
-        if(!gotFrames) {
-            listener.onStatusIdle();
-        }
-        
-        checking = false;
-        startCheck();
-    }
-    
-    public void onNewByte(final int b) {
-        listener.onStatusReading();
-    }
-    public void onSync(final int[] bytes, final int nBytesInSync) {}
-    public void onNewFrame(final int b1, final int b2) {
-        listener.onStatusGotData();
-        gotFrames = true;
-    }
-    public void onNewDataPacket(final int[] packetData) {}
-    public void onNewTimePacket(final int[] packetData) {}
-    public void onNewSingleFrame(final int b1, final int b2) {}
-    public void onExpectNewPacket(final FramePacket p) {}
-    public void onPacketDataByte(final FramePacket p) {}    
-    public void onNewconfigParamMessage(final int[] packetData) {
-        listener.onNewConfigMessage(packetData);
-    }
-}
-
-class ComboItem {
-
-    private int     val;
-    private String  description;
-
-    public ComboItem(int val, String description) {
-        this.val = val;
-        this.description = description;
-    }
-    public int getVal() {
-    return val;
-  }
-    public String getDescription() {
-    return description;
-  }
-
-    @Override
-    public String toString() {
-    return description;
-  }
 }
