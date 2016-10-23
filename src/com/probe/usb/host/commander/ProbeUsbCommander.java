@@ -11,7 +11,7 @@ import static com.probe.usb.host.common.ConfigCommand.*;
 
 public class ProbeUsbCommander
 {
-    protected List<Short> bytes = new ArrayList<Short>(); 
+    protected List<Short> bytes = new ArrayList<>();
     
     public int popOutputByte() {
       if (bytes.isEmpty())  return -1;
@@ -36,7 +36,7 @@ public class ProbeUsbCommander
             this.bytes.add(b); 
     }
         
-    protected void deviceCommand(short firstByte, final ConfigParamType paramType, final Object value) {
+    public void deviceCommand(short firstByte, final ConfigParamType paramType, final Object value) {
         final int intValue = encodeValue(value);
         bytesToDevice(firstByte, (short)paramType.index, (short)(intValue / 256), (short)(intValue % 256));
     }
@@ -56,10 +56,21 @@ public class ProbeUsbCommander
     public void deviceAccRegRead(final int regAddress) {
         bytesToDevice(accRegRead.getFirstByte(), (short)regAddress, (short)0, (short)0);
     }
-    
-    public void deviceSetTime(Date datetime) {
-        final long unixTime = datetime.getTime() / 1000;
+
+    public void deviceSetTime(final int unixTime) {
         bytesToDevice(setTimeHi.getFirstByte(), (short)0, nthByte(unixTime, 3), nthByte(unixTime, 2));
         bytesToDevice(setTimeLo.getFirstByte(), (short)0, nthByte(unixTime, 1), nthByte(unixTime, 0));
+    }
+    
+    public void deviceSetTime(Date datetime) {
+        deviceSetTime((int)(datetime.getTime() / 1000));
+    }
+
+    public void deviceStartRecording() {
+        bytesToDevice(startRecording.getFirstByte(), (short)0, (short)0, (short)0);
+    }
+
+    public void deviceStopRecording() {
+        bytesToDevice(stopRecording.getFirstByte(), (short)0, (short)0, (short)0);
     }
 }
