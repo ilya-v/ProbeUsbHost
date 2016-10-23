@@ -58,13 +58,14 @@ public class ProbeUsbParser
             }
 
         for (FramePacket fp: framePackets)
-            while (fp.getPacketCount() > 0)
-                for (PacketProcessor pp: packetProcessors) {
-                    final int[] packetData = fp.popPacket();
+            while (fp.getPacketCount() > 0) {
+                final int[] packetData = fp.popPacket();
+                for (PacketProcessor pp : packetProcessors) {
                     pp.processPacket(fp.getPacketType(), packetData);
                     if (resetFrameCounterAfterEachFramePacket)
                         frameDetector.resetFrameCounter();
                 }
+            }
 
         if (updatedFramePacket != null)
             for (FramePacket fp: framePackets)
