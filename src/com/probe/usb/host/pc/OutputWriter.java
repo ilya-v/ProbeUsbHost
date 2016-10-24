@@ -17,6 +17,7 @@ public class OutputWriter {
     protected int flushDelayMs = 1000;
     protected FileWriter writer;
     protected String currentFileName;
+    protected int lineCount = 0;
 
     public OutputWriter setOutputDir(final String outputDir) {
         this.outputDir = outputDir;
@@ -44,6 +45,10 @@ public class OutputWriter {
         writer.write(data);
         lastWriteTime = new Date();
 
+        for (int i = 0; i < data.length(); i++)
+            if (data.charAt(i) == '\n')
+                lineCount ++;
+
         if (lastFlushTime.getTime() + flushDelayMs < new Date().getTime()){
             writer.flush();
             lastFlushTime = new Date();
@@ -66,11 +71,13 @@ public class OutputWriter {
         closeFile();
         currentFileName = makeFileName();
         writer = new FileWriter(new File(currentFileName));
+        lineCount = 0;
     }
 
     public String getCurrentFileName() {
         return currentFileName;
     }
+    public int getCurrentLineCount() { return lineCount; }
 
     protected void closeFile() throws IOException {
         if (writer == null)
