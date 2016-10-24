@@ -1,8 +1,9 @@
 package com.probe.usb.host.pc;
 
 import com.probe.usb.host.parser.ParserEventListener;
+import com.probe.usb.host.pc.controller.ConnectionStatus;
 
-class StatusListener extends ParserEventListener {
+public class StatusListener extends ParserEventListener {
 
     private Listener listener;
 
@@ -19,10 +20,6 @@ class StatusListener extends ParserEventListener {
         if (newStatus != status)
             listener.onStatusChange(newStatus);
         status = newStatus;
-    }
-
-    public void onDisconnected () {
-        updateStatus(ConnectionStatus.Disconnected);
     }
 
     public void onConnectionStatus(boolean connected) {
@@ -46,14 +43,6 @@ class StatusListener extends ParserEventListener {
     public void onNewFrame(final int b1, final int b2) {
         updateStatus(ConnectionStatus.Data);
         gotFrames = true;
-    }
-
-    enum ConnectionStatus {
-        Disconnected,
-        Connected,
-        Reading,
-        Data,
-        Idle
     }
 
     interface Listener {

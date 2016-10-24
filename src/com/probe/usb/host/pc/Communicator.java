@@ -115,9 +115,9 @@ public class Communicator {
                 receiver.handle((byte)b);
     }
 
-    public void writeData(byte [] data) {
+    public boolean writeData(byte [] data) {
         if(serialPort == null)
-            return;
+            return false;
         
         try  {
             serialPort.getOutputStream().write(data);
@@ -125,7 +125,9 @@ public class Communicator {
         }
         catch (Exception e)   {
             logException("Cannot write data to a serial port", e);
+            return false;
         }
+        return true;
     }
 
     public String getPortName() {
