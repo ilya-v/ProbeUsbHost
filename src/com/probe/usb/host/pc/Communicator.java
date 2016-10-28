@@ -15,10 +15,12 @@ public class Communicator {
     interface Receiver {  void handle(byte data); }
     interface Logger { void print(String line);  }
     interface Listener { void connectionStatus(boolean connected); }
+    interface PortUpdateListener { void onNewPorts(List<String> ports); }
 
     private Receiver receiver;
     private Logger logger;
     private Listener listener;
+    private PortUpdateListener portUpdateListener;
 
     public Communicator setReceiver(Receiver receiver) {
         this.receiver = receiver;
@@ -32,9 +34,13 @@ public class Communicator {
         this.listener = listener;
         return this;
     }
+    public Communicator setPortUpdateListener(PortUpdateListener portUpdateListener) {
+        this.portUpdateListener = portUpdateListener;
+        return this;
+    }
 
     private SerialPort serialPort = null;
-    private Map<String, CommPortIdentifier>  ports;
+    private Map<String, CommPortIdentifier> portsMap = new HashMap<>();
     final static int TIMEOUT = 2000;
 
 
@@ -44,16 +50,15 @@ public class Communicator {
     }
 
 
-    public List<String> searchForPorts() {
+    private List<String> searchForPorts() {
         List<String> portList = new ArrayList<>();
-        this.ports = new HashMap<>();
-
+        this.portsMap = new HashMap<>();
         Enumeration ports = CommPortIdentifier.getPortIdentifiers();
         while (ports.hasMoreElements()) {
             CommPortIdentifier curPort = (CommPortIdentifier)ports.nextElement();
             if (curPort.getPortType() == CommPortIdentifier.PORT_SERIAL) {
                 portList.add(curPort.getName());
-                this.ports.put(curPort.getName(), curPort);
+                this.portsMap.put(curPort.getName(), curPort);
             }
         }
         return portList;
@@ -63,7 +68,7 @@ public class Communicator {
     public boolean connect(String portName) {
         try {
             disconnect();
-            CommPortIdentifier portId = ports.get(portName);
+            CommPortIdentifier portId = portsMap.get(portName);
             serialPort = (SerialPort) portId.open("ProbeBoardControlPanel", TIMEOUT);
             serialPort.addEventListener(this::serialEvent);
             serialPort.notifyOnDataAvailable(true);
@@ -132,6 +137,22 @@ public class Communicator {
 
     public String getPortName() {
         return serialPort == null? "" : serialPort.getName();
+    }
+
+    public void onTimerTick() {
+        if (serialPort != null)
+            return;
+        Map<String, CommPortIdentifier> oldPorts = this.portsMap;
+        List<String> newPorts = searchForPorts();
+        boolean changed = false;
+        for (String p: newPorts) {
+            if (!oldPorts.containsKey(p)) {
+                changed = true;
+                break;
+            }
+        }
+        if (changed || newPorts.size() != oldPorts.size())
+            portUpdateListener.onNewPorts(newPorts);
     }
 }
 

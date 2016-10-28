@@ -12,7 +12,7 @@ public class ProbeMainFrame extends JFrame  {
     public javax.swing.JComboBox<String> cboxArgumentType;
     public javax.swing.JComboBox<String> cboxCommand;
     public javax.swing.JButton connectionIndicator;
-    public javax.swing.JButton datafileButton;
+    public javax.swing.JButton btnChooseInputFile;
     public javax.swing.JCheckBox checkBoxFromDataFile;
     private javax.swing.JLabel labelComPortCaption;
     private javax.swing.JLabel labelCommand;
@@ -25,10 +25,10 @@ public class ProbeMainFrame extends JFrame  {
     private javax.swing.JScrollPane logScrollPane;
     public javax.swing.JTextField lastSavedFileField;
     public javax.swing.JLabel locLabel;
-    public javax.swing.JTextField outputDirDisplay;
-    public javax.swing.JButton outputdirButton;
-    private javax.swing.JButton performCommandsButton;
-    public javax.swing.JButton selectCommandFileButton;
+    public javax.swing.JTextField txtOutputDir;
+    public javax.swing.JButton btnChooseOutputDir;
+    private javax.swing.JButton btnExecuteCommands;
+    public javax.swing.JButton btnChooseCommandFile;
     public javax.swing.JButton sendButton;
     public javax.swing.JTextArea sendLog;
     public javax.swing.JTextField txtCommandArg;
@@ -49,19 +49,19 @@ public class ProbeMainFrame extends JFrame  {
         txtCommandArg = new javax.swing.JTextField();
         labelArgValueCaption = new javax.swing.JLabel();
         checkBoxFromDataFile = new javax.swing.JCheckBox();
-        datafileButton = new javax.swing.JButton();
+        btnChooseInputFile = new javax.swing.JButton();
         plotButton = new javax.swing.JToggleButton();
         jLabel6 = new javax.swing.JLabel();
-        outputdirButton = new javax.swing.JButton();
-        outputDirDisplay = new javax.swing.JTextField();
+        btnChooseOutputDir = new javax.swing.JButton();
+        txtOutputDir = new javax.swing.JTextField();
         autoButton = new javax.swing.JToggleButton("Auto Scan Ports", true);
         labelConnectionStatus = new javax.swing.JLabel();
         connectionIndicator = new javax.swing.JButton();
         lastSavedFileLabel = new javax.swing.JLabel();
         lastSavedFileField = new javax.swing.JTextField();
         locLabel = new javax.swing.JLabel();
-        selectCommandFileButton = new javax.swing.JButton();
-        performCommandsButton = new javax.swing.JButton();
+        btnChooseCommandFile = new javax.swing.JButton();
+        btnExecuteCommands = new javax.swing.JButton();
         checkBoxSaveAccOutput = new javax.swing.JCheckBox();
 
         sendButton.setText("Send Command");
@@ -74,21 +74,21 @@ public class ProbeMainFrame extends JFrame  {
         labelLogCaption.setText("Log");
         labelArgValueCaption.setText("Value");
         plotButton.setText("Plot");
-        performCommandsButton.setText("Execute Commands");
-        performCommandsButton.setEnabled(false);
-        datafileButton.setText("Choose File...");
-        datafileButton.setEnabled(false);
+        btnExecuteCommands.setText("Execute Commands");
+        btnExecuteCommands.setEnabled(false);
+        btnChooseInputFile.setText("Choose File...");
+        btnChooseInputFile.setEnabled(false);
         jLabel6.setText("Directory for output files:");
-        outputdirButton.setText("Choose...");
+        btnChooseOutputDir.setText("Choose...");
         labelConnectionStatus.setText("Connection Status:");
         connectionIndicator.setText("disconnected");
         checkBoxFromDataFile.setText("Read From File");
-        outputDirDisplay.setEditable(false);
+        txtOutputDir.setEditable(false);
         connectionIndicator.setEnabled(false);
         lastSavedFileLabel.setText("Last Saved File:");
         lastSavedFileField.setEditable(false);
         locLabel.setText("        ");
-        selectCommandFileButton.setText("Open Command File");
+        btnChooseCommandFile.setText("Open Command File");
         sendLog.setEditable(false);
         cboxPorts.setEnabled( !autoButton.isSelected() );
         cboxPorts.setEditable(true);
@@ -115,7 +115,7 @@ public class ProbeMainFrame extends JFrame  {
                                                 .addComponent(autoButton)
                                                 .addGap(0, 0, Short.MAX_VALUE)
                                                 .addComponent(checkBoxFromDataFile)
-                                                .addComponent(datafileButton)
+                                                .addComponent(btnChooseInputFile)
                                                 .addGap(0, 0, Short.MAX_VALUE)
                                                 .addComponent(plotButton))
                                         .addGroup(layout.createSequentialGroup()
@@ -128,7 +128,7 @@ public class ProbeMainFrame extends JFrame  {
                                                                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                                                                         .addComponent(cboxArgumentType, javax.swing.GroupLayout.PREFERRED_SIZE, 244, javax.swing.GroupLayout.PREFERRED_SIZE)
                                                                         .addComponent(labelArgType)
-                                                                        .addComponent(performCommandsButton))
+                                                                        .addComponent(btnExecuteCommands))
                                                                 .addGap(18, 18, 18)
                                                                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                                                                         .addComponent(txtCommandArg)
@@ -140,7 +140,7 @@ public class ProbeMainFrame extends JFrame  {
                                                         .addGroup(layout.createSequentialGroup()
                                                                 .addComponent(jLabel6)
                                                                 .addGap(24, 24, 24)
-                                                                .addComponent(outputDirDisplay))
+                                                                .addComponent(txtOutputDir))
                                                         .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING)
                                                                 .addComponent(autoButton, javax.swing.GroupLayout.PREFERRED_SIZE, 84, javax.swing.GroupLayout.PREFERRED_SIZE)
                                                                 .addGroup(javax.swing.GroupLayout.Alignment.LEADING, layout.createSequentialGroup()
@@ -157,11 +157,11 @@ public class ProbeMainFrame extends JFrame  {
                                                         .addGroup(layout.createSequentialGroup()
                                                                 .addComponent(locLabel, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
                                                                 .addGap(95, 95, 95))
-                                                        .addComponent(outputdirButton, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)))
+                                                        .addComponent(btnChooseOutputDir, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)))
                                         .addGroup(layout.createSequentialGroup()
                                                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                                                         .addComponent(labelLogCaption)
-                                                        .addComponent(selectCommandFileButton, javax.swing.GroupLayout.PREFERRED_SIZE, 233, javax.swing.GroupLayout.PREFERRED_SIZE))
+                                                        .addComponent(btnChooseCommandFile, javax.swing.GroupLayout.PREFERRED_SIZE, 233, javax.swing.GroupLayout.PREFERRED_SIZE))
                                                 .addGap(0, 0, Short.MAX_VALUE)))
                                 .addContainerGap())
         );
@@ -175,7 +175,7 @@ public class ProbeMainFrame extends JFrame  {
                                                         .addComponent(cboxPorts, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
                                                         .addComponent(labelComPortCaption)
                                                         .addComponent(checkBoxFromDataFile)
-                                                        .addComponent(datafileButton)
+                                                        .addComponent(btnChooseInputFile)
                                                         .addComponent(autoButton)
                                                         .addComponent(plotButton))
                                                 .addGap(18, 18, 18)
@@ -198,13 +198,13 @@ public class ProbeMainFrame extends JFrame  {
                                         .addComponent(sendButton))
                                 .addGap(18, 18, 18)
                                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
-                                        .addComponent(selectCommandFileButton)
-                                        .addComponent(performCommandsButton))
+                                        .addComponent(btnChooseCommandFile)
+                                        .addComponent(btnExecuteCommands))
                                 .addGap(33, 33, 33)
                                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                                         .addComponent(jLabel6)
-                                        .addComponent(outputDirDisplay, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
-                                        .addComponent(outputdirButton))
+                                        .addComponent(txtOutputDir, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
+                                        .addComponent(btnChooseOutputDir))
                                 .addGap(18, 18, 18)
                                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.BASELINE)
                                         .addComponent(lastSavedFileLabel)

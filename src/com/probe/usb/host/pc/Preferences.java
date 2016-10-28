@@ -19,15 +19,15 @@ public class Preferences {
         prefs.put(PREF_OUTPUTDIR_NAME, outputDirectory);
     }
 
-    public String getLastFileName() {
+    public String getLastFileName(String item) {
         java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(ProbeGUI.class);
         String defaultValue = System.getProperty("none");
-        return prefs.get(PREF_LASTFILE_NAME, defaultValue);
+        return prefs.get(PREF_LASTFILE_NAME + "-" + item, defaultValue);
     }
 
-    public void saveLastFileName(String fileName) {
+    public void saveLastFileName(String item, String fileName) {
         java.util.prefs.Preferences prefs = java.util.prefs.Preferences.userNodeForPackage(ProbeGUI.class);
-        prefs.put(PREF_LASTFILE_NAME, fileName);
+        prefs.put(PREF_LASTFILE_NAME + "-" + item, fileName);
     }
 
     public String getConfigFileDirectory() {

@@ -3,26 +3,26 @@ package com.probe.usb.host.pc;
 import com.probe.usb.host.commander.ProbeUsbCommander;
 import com.probe.usb.host.parser.ParserEventListener;
 import com.probe.usb.host.parser.ProbeUsbParser;
-import com.probe.usb.host.parser.processor.PrintProcessor;
-import com.probe.usb.host.parser.processor.PrintProcessor.OutputElement;
-import com.probe.usb.host.parser.processor.TablePrintProcessor;
+import com.probe.usb.host.parser.processor.PlotProcessor;
 
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.util.*;
+import java.nio.file.Paths;
 import java.util.List;
 import javax.swing.*;
-import javax.swing.Timer;;
+import javax.swing.Timer;
 
 import com.probe.usb.host.pc.controller.CommandSender;
-import com.probe.usb.host.pc.controller.ConnectionStatus;
+import com.probe.usb.host.pc.controller.OutputController;
+import com.probe.usb.host.pc.controller.PlotController;
 import com.probe.usb.host.pc.plot.Plot;
-import com.probe.usb.host.pc.ui.*;
 import com.probe.usb.host.pc.ui.LookAndFeel;
-import com.probe.usb.host.pc.ui.frame.ProbeMainFrame;
+import com.probe.usb.host.pc.ui.controller.*;
+import com.probe.usb.host.pc.controller.PortScanner;
+import com.probe.usb.host.pc.ui.frame.ProbeMainWindow;
 
 import java.awt.event.ActionEvent;
 import java.nio.charset.StandardCharsets;
@@ -30,7 +30,9 @@ import java.nio.charset.StandardCharsets;
 public class ProbeGUI {
 
     public static ProbeGUI instance;
-    public static JFrame graph;
+    public static Plot plot;
+
+    private ProbeMainWindow ui = new ProbeMainWindow();
 
     private Preferences preferences = new Preferences();
 
@@ -39,18 +41,14 @@ public class ProbeGUI {
         void printLine(String line) { printToWindowLog(line);}
     };
 
-    private TablePrintProcessor packetProcessor = new TablePrintProcessor();
 
-    private PrintProcessor printProcessor = new PrintProcessor()
-            .disableOutputOf(OutputElement.DanglingPacket)
-            .disableOutputOf(OutputElement.DataPacket);
-
-    private StatusListener statusEventListener = new StatusListener(this::onConnectionStatusChanged);
+    private StatusListener statusEventListener = new StatusListener();
 
     private ParserEventListener bytesAndFramesListener = new ParserEventListener() {
         @Override public void onNewByte(final int b) {
             statusEventListener.onNewByte(b);
             portScanner.onNewByte(b);
+            outputController.addNewByte(b);
         }
         @Override public void onNewFrame(final int b1, final int b2) {
             statusEventListener.onNewFrame(b1, b2);
@@ -58,194 +56,157 @@ public class ProbeGUI {
         }
     };
 
+
+    private PlotController plotController = new PlotController()
+            .setPlotDataListener(new PlotController.PlotDataListener() {
+                @Override
+                public void setPlotData(List<Plot.Point> px, List<Plot.Point> py, List<Plot.Point> pz, List<Double> verticalLines) {
+                    plotUiController.setPlotData(px, py, pz, verticalLines);
+                }
+                @Override  public void setPlotBounds(double x0, double y0, double xz, double yz) {
+                    plotUiController.setPlotBounds(x0, y0, xz, yz);
+                }
+                @Override public void reset() {
+                    plotUiController.reset();
+                }
+            });
+
+    private PlotProcessor plotProcessor = new PlotProcessor().setPointsListener(plotController::onNewPoint);
+
     private ProbeUsbParser parser = new ProbeUsbParser()
             .setListener(bytesAndFramesListener)
-            .addPacketProcessor(packetProcessor)
-            .addPacketProcessor(printProcessor);
+            .addPacketProcessor(plotProcessor)
+            ;
 
     private Communicator communicator = new Communicator()
             .setLogger(logger::printLine)
             .setListener(statusEventListener::onConnectionStatus)
             .setReceiver(b -> {
                 parser.addByte(Byte.toUnsignedInt(b));
-                printToWindowLog( printProcessor.popResult() );
-                writeNewFileToOutputDirectory();
             });
 
     private ProbeUsbCommander probeCommander = new ProbeUsbCommander();
-
-    private OutputWriter outputWriter = new OutputWriter()
-            .setFileNamePrefix("accel-")
-            .setOutputDir( preferences.getOutputDirectory() );
-
-    private ProbeMainFrame ui = new ProbeMainFrame();
-
-    private PortScanner portScanner = new PortScanner(communicator)
-            .setLogger(logger::printLine)
-            .setEnabledInfo( () ->  ui.autoButton.isSelected())
-            .setStatusListener( (connected, portName) -> {
-                ui.cboxPorts.setSelectedItem(connected? portName : "");
-            });
 
     private CommandSender commandSender = new CommandSender()
             .setLogger(logger::printLine)
             .setInputByteSource(probeCommander::popOutputByte)
             .setDataReceiver(communicator::writeData);
 
-    private CommandUiControl commandUiControl = new CommandUiControl(
-            ui.cboxCommand, ui.cboxArgumentType, ui.txtCommandArg, ui.sendButton)
+    private CommandUiController commandUiController = new CommandUiController(
+                ui.cboxCommand, ui.cboxArgumentType, ui.txtCommandArg, ui.sendButton)
             .setCommander(probeCommander)
             .setCommandListener(cmd -> { commandSender.onNewInputBytes(); });
 
-    private ConnectionStatus connectionStatus = ConnectionStatus.Disconnected;
+    private PortScanUiController portScanUiController = new PortScanUiController(
+                ui.cboxPorts, ui.autoButton, ui.connectionIndicator)
+            .setLogger(logger::printLine)
+            .setConnectionCommandListener( (port, action) -> {
+                if(action) communicator.connect(port); else communicator.disconnect();});
 
-    private Timer timer = new Timer(1000, e -> {
-        List<String> portNames = new ArrayList<>();
-        if (connectionStatus == ConnectionStatus.Disconnected) {
-            portNames = communicator.searchForPorts();
-            String[] modelPorts = portNames.toArray(new String[portNames.size() + 1]);
-            modelPorts[portNames.size()] = "";
+    private PortScanner portScanner = new PortScanner(communicator)
+            .setLogger(logger::printLine)
+            .setEnabledInfo( () ->  ui.autoButton.isSelected())
+            .setStatusListener( portScanUiController::onConnectedEvent );
 
-            if (!ui.cboxPorts.isPopupVisible()) {
-                final String portSelection = (String) (ui.cboxPorts.getSelectedItem());
-                ui.cboxPorts.setModel(new DefaultComboBoxModel<>(modelPorts));
-                ui.cboxPorts.setSelectedItem(portSelection);
-            }
+    private OutputController outputController = new OutputController()
+            .setPreferences(preferences)
+            .setParser(parser)
+            .setLogger(logger::printLine);
+
+    class Feeder implements Runnable {
+        byte[] bytes;
+        int pos = 0;
+        final int chunkSize = 1000;
+        public Feeder(byte[] bytes) {
+            this.bytes = bytes;
         }
-        portScanner.onTimerTick(portNames);
+        @Override
+        public void run() {
+            final int posStop = Math.min(pos + chunkSize, bytes.length);
+            while (pos < posStop) {
+                parser.addByte(Byte.toUnsignedInt(bytes[pos]));
+                pos ++;
+            }
+
+            if (pos < bytes.length)
+                SwingUtilities.invokeLater(this);
+        }
+
+    }
+
+    InputFileUiController inputFileUiController = new InputFileUiController(
+                ui.btnInputFromFile, ui.btnChooseInputFile, ui.txtInputDataFile)
+            .setPreferences(preferences)
+            .setStateListener(active -> {
+                commandUiController.setEnabled(!active);
+                portScanUiController.setEnabled(!active);
+            })
+            .setOpenFileListener(filePath -> {
+                byte [] fileData = new byte[0];
+                try {
+                    fileData = Files.readAllBytes(Paths.get(filePath));
+                } catch (IOException ex) { logger.printLine(ex.toString()); }
+
+                SwingUtilities.invokeLater(new Feeder(fileData));
+
+                /*for (int b: fileData) {
+                    parser.addByte(b);
+                }*/
+                plotController.resetPlot();
+                outputController.forceNewFiles();
+            });
+
+    Timer timer = new Timer(1000, e -> {
+        communicator.onTimerTick();
+        portScanner.onTimerTick();
         statusEventListener.onTimerTick();
         commandSender.onTimerTick();
-    } );
+        outputController.tick();
+        plotController.tick();
+    });
+
+
+    private OutputSettingsUiController outputSettingsUiController = new OutputSettingsUiController(
+            preferences,
+            ui.btnChooseOutputDir,
+            ui.txtOutputDir,
+            ui.txtRawFile, ui.txtAccFile, ui.txtMessagesFile,
+            ui.lblRaw, ui.lblAcc, ui.lblMessages,
+            ui.btnRaw, ui.btnAcc, ui.btnMessages
+            )
+        .setOutputController( outputController );
+
     {
+        communicator.setPortUpdateListener(ports -> {
+            portScanUiController.onPortsUpdateEvent(ports);
+            portScanner.onPortsUpdate(ports);
+        });
+
+        statusEventListener.setConnectionStatusListener(status ->
+            portScanUiController.onConnectionStatusChanged(status));
+
+        outputController.setFileStatusListener(outputSettingsUiController::onFileStatus);
+
+        plot.setLogger(logger::printLine);
         timer.start();
     }
 
-    public ProbeGUI() {
+    private PlotUiController plotUiController = new PlotUiController(plot,
+            ui.btnPlotPictures, ui.plotSliderX, ui.plotSliderY)
+            .setPlotController(plotController);
 
-        ui.checkBoxFromDataFile.addActionListener(this::checkBoxFromDataFileActionPerformed);
-        ui.cboxPorts.addActionListener(this::cboxPortsActionPerformed);
-        ui.datafileButton.addActionListener(this::datafileButtonActionPerformed);
-        ui.autoButton.addActionListener(this::autoButtonActionPerformed);
-        ui.outputdirButton.addActionListener(this::outputdirButtonActionPerformed);
-        ui.plotButton.addActionListener(this::plotButtonActionPerformed);
-        ui.selectCommandFileButton.addActionListener(this::selectCommandFileButtonActionPerformed);
-        ui.outputDirDisplay.setText(preferences.getOutputDirectory());
-        ui.lastSavedFileField.setText(preferences.getLastFileName());
+    public ProbeGUI() {
+        ui.plotButton.addActionListener(evt -> plot.setVisible(ui.plotButton.isSelected()) );
+        ui.btnChooseCommandFile.addActionListener(this::selectCommandFileButtonActionPerformed);
 
         ui.addWindowListener(new WindowAdapter(){
             public void windowClosing(WindowEvent e){
                 communicator.disconnect();
             }
         });
+        ui.btnExecuteCommands.addActionListener(this::selectCommandFileButtonActionPerformed);
     }
 
-
-    private void cboxPortsActionPerformed(ActionEvent evt) {
-        if (ui.autoButton.isSelected() || ui.checkBoxFromDataFile.isSelected())
-            return;
-
-        if (!communicator.getPortName().isEmpty())
-            printToWindowLog("Disconnected from " + communicator.getPortName());
-        communicator.disconnect();
-
-        if (ui.cboxPorts.getSelectedItem() == null)
-            return;
-
-        String port = String.valueOf(ui.cboxPorts.getSelectedItem());
-
-        if (!port.isEmpty() && communicator.connect(port))
-            printToWindowLog("Connected to " + communicator.getPortName());
-    }
-
-
-    private void checkBoxFromDataFileActionPerformed(ActionEvent evt) {
-        final boolean dataFromFile = ((JCheckBox) evt.getSource()).isSelected();
-        ui.datafileButton.setEnabled(dataFromFile);
-        ui.cboxPorts.setEnabled(!dataFromFile);
-        commandUiControl.setEnabled(!dataFromFile && connectionStatus != ConnectionStatus.Disconnected);
-        ui.autoButton.setEnabled(!dataFromFile);
-        ui.autoButton.setSelected(!dataFromFile && ui.autoButton.isSelected());
-        if (dataFromFile) {
-            if (!communicator.getPortName().isEmpty())
-                printToWindowLog("Disconnected from " + communicator.getPortName());
-            communicator.disconnect();
-        }
-    }
-
-    private void autoButtonActionPerformed(ActionEvent evt) {
-        ui.cboxPorts.setEnabled( !ui.autoButton.isSelected() );
-        if (ui.autoButton.isSelected()) {
-            if (!communicator.getPortName().isEmpty())
-                printToWindowLog("Disconnected from " + communicator.getPortName());
-            communicator.disconnect();
-        }
-    }
-
-    private void datafileButtonActionPerformed(ActionEvent evt) {//GEN-FIRST:event_datafileButtonActionPerformed
-        // Выбрать файл для чтения
-        final JFileChooser fc = new JFileChooser();
-        int returnVal = fc.showOpenDialog(ui);
-
-        if (returnVal == JFileChooser.APPROVE_OPTION) {
-            File file = fc.getSelectedFile();
-            byte [] fileData;
-            
-            try {
-                fileData = Files.readAllBytes(file.toPath());
-            } catch (IOException ex) {
-                logger.printLine(ex.toString());
-                return;
-            }
-
-            for (int b: fileData) {
-                parser.addByte(b);
-            }
-
-            outputWriter.forceNewFile();
-            writeNewFileToOutputDirectory();
-        }
-    }//GEN-LAST:event_datafileButtonActionPerformed
-
-    private void writeNewFileToOutputDirectory() {
-        final String data = packetProcessor.popResult();
-        if (data.isEmpty())
-            return;
-        try {
-            outputWriter.write(data);
-        }
-        catch (IOException e) {
-            logger.printLine(e.toString());
-        }
-
-        if (outputWriter.getCurrentFileName() == null)
-            return;
-
-        if (!ui.lastSavedFileField.getText().equals(outputWriter.getCurrentFileName())) {
-            ui.lastSavedFileField.setText(outputWriter.getCurrentFileName());
-            preferences.saveLastFileName(outputWriter.getCurrentFileName());
-        }
-
-        ui.locLabel.setText("" + outputWriter.getCurrentLineCount() + " lines");
-    }
-
-    
-    private void outputdirButtonActionPerformed(ActionEvent evt) {//GEN-FIRST:event_outputdirButtonActionPerformed
-        final JFileChooser fc = new JFileChooser();
-        fc.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-        int returnVal = fc.showSaveDialog(ui);
-
-        if (returnVal == JFileChooser.APPROVE_OPTION) {
-            File folder = fc.getSelectedFile();
-            final String outputDirectory = folder.getPath();
-            ui.outputDirDisplay.setText(outputDirectory);
-            preferences.saveOutputDirectory(outputDirectory);
-            outputWriter.setOutputDir(outputDirectory);
-        }
-    }//GEN-LAST:event_outputdirButtonActionPerformed
-
-    private void plotButtonActionPerformed(ActionEvent evt) {
-        graph.setVisible(ui.plotButton.isSelected());
-    }
 
     private void selectCommandFileButtonActionPerformed(ActionEvent evt) {
         
@@ -269,13 +230,6 @@ public class ProbeGUI {
         commandSender.parseAndSendBytes(lines);
     }
 
-    private void onConnectionStatusChanged(ConnectionStatus status) {
-        connectionStatus = status;
-        commandUiControl.setEnabled( !ui.checkBoxFromDataFile.isSelected() && status != ConnectionStatus.Disconnected );
-        ui.connectionIndicator.setForeground(ConnectionStatusUiPropeties.getColor(status));
-        ui.connectionIndicator.setText(ConnectionStatusUiPropeties.getText(status));
-    }
-
     private void addErrorLine(String line) {
         ui.sendLog.append("ERROR : " + line + "\n");
     }
@@ -284,19 +238,12 @@ public class ProbeGUI {
         if (line.isEmpty()) return;
         ui.sendLog.append(line + "\n");
     }
-
-
-    
-    private void enableControls(boolean enable) {
-        ui.cboxPorts.setEnabled(enable);
-        ui.autoButton.setEnabled(enable);
-        commandUiControl.setEnabled(enable);
-    }
         
 
     public static void main(String args[]) {
         LookAndFeel.init();
+        plot = new Plot();
         instance = new ProbeGUI();
-        graph = new Plot();
     }
+
 }

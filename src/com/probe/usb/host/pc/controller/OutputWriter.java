@@ -1,30 +1,38 @@
-package com.probe.usb.host.pc;
+package com.probe.usb.host.pc.controller;
 
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
+import java.io.*;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
 public class OutputWriter {
 
     protected String outputDir = "";
-    protected String fileNamePrefix = "";
+    protected String
+            fileNamePrefix = "",
+            fileNameSuffix = ".dat";
     protected Date lastWriteTime = new Date();
     protected Date lastFlushTime = new Date();
     protected int fileDelayMs = 1000;
     protected int flushDelayMs = 1000;
-    protected FileWriter writer;
     protected String currentFileName;
-    protected int lineCount = 0;
+
+    protected FileOutputStream fileOutputStream;
+    protected long count = 0;
+
+    protected boolean enabled = false;
+
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
+    }
 
     public OutputWriter setOutputDir(final String outputDir) {
         this.outputDir = outputDir;
         return this;
     }
-    public OutputWriter setFileNamePrefix(final String fileNamePrefix) {
+    public OutputWriter setFileName(final String fileNamePrefix, final String fileNameSuffix) {
         this.fileNamePrefix = fileNamePrefix;
+        this.fileNameSuffix = fileNameSuffix;
         return this;
     }
     public OutputWriter setMaxDelayBetweenFiles(final int fileDelayMs) {
@@ -36,23 +44,25 @@ public class OutputWriter {
         return  this;
     }
 
-    public void write(final String data) throws IOException {
-        if (data.isEmpty())
-            return;
-        tick();
-        if (writer == null)
-            openFile();
-        writer.write(data);
-        lastWriteTime = new Date();
+    public boolean write(final byte[] data) {
+        if (data == null || data.length == 0 || !enabled)
+            return data != null && data.length == 0;
+        try {
+            tick();
+            if (fileOutputStream == null)
+                openFile();
+            fileOutputStream.write(data);
+            lastWriteTime = new Date();
+            count += data.length;
 
-        for (int i = 0; i < data.length(); i++)
-            if (data.charAt(i) == '\n')
-                lineCount ++;
-
-        if (lastFlushTime.getTime() + flushDelayMs < new Date().getTime()){
-            writer.flush();
-            lastFlushTime = new Date();
+            if (lastFlushTime.getTime() + flushDelayMs < new Date().getTime()) {
+                fileOutputStream.flush();
+                lastFlushTime = new Date();
+            }
+        } catch (IOException e) {
+            return false;
         }
+        return true;
     }
 
     public void forceNewFile() {
@@ -70,25 +80,28 @@ public class OutputWriter {
     protected void openFile() throws IOException {
         closeFile();
         currentFileName = makeFileName();
-        writer = new FileWriter(new File(currentFileName));
-        lineCount = 0;
+        fileOutputStream = new FileOutputStream(currentFileName);
+        count = 0;
     }
 
     public String getCurrentFileName() {
         return currentFileName;
     }
-    public int getCurrentLineCount() { return lineCount; }
+    public long getCurrentByteCount() { return count; }
 
     protected void closeFile() throws IOException {
-        if (writer == null)
+        if (fileOutputStream == null)
             return;
-        writer.close();
-        writer = null;
+        fileOutputStream.flush();
+        fileOutputStream.close();
+        fileOutputStream = null;
         currentFileName = null;
     }
 
     protected String makeFileName() {
-        String fileName = fileNamePrefix + new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss").format(new Date()) + ".txt";
+        String fileName = fileNamePrefix
+                + new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss").format(new Date())
+                + fileNameSuffix;
         final File dir  = new File (outputDir);
         return new File (dir, fileName).getAbsolutePath();
     }

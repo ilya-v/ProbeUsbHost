@@ -1,4 +1,4 @@
-package com.probe.usb.host.pc.ui;
+package com.probe.usb.host.pc.ui.controller;
 
 import com.probe.usb.host.common.ConfigCommand;
 

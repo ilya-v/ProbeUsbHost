@@ -5,20 +5,21 @@ import com.probe.usb.host.pc.controller.ConnectionStatus;
 
 public class StatusListener extends ParserEventListener {
 
-    private Listener listener;
+    private ConnectionStatusListener connectionStatusListener;
 
     private boolean gotFrames = false;
     private boolean gotBytes = false;
     private ConnectionStatus status = ConnectionStatus.Disconnected;
 
 
-    public StatusListener(Listener listener) {
-        this.listener = listener;
+    public StatusListener setConnectionStatusListener(ConnectionStatusListener connectionStatusListener) {
+        this.connectionStatusListener = connectionStatusListener;
+        return this;
     }
 
     private void updateStatus(ConnectionStatus newStatus) {
         if (newStatus != status)
-            listener.onStatusChange(newStatus);
+            connectionStatusListener.onStatusChange(newStatus);
         status = newStatus;
     }
 
@@ -45,7 +46,7 @@ public class StatusListener extends ParserEventListener {
         gotFrames = true;
     }
 
-    interface Listener {
+    interface ConnectionStatusListener {
         void onStatusChange(ConnectionStatus connectionStatus);
     }
 }

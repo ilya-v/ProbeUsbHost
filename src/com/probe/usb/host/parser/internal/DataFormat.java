@@ -5,7 +5,7 @@ import static com.probe.usb.host.parser.internal.DataFormat.FrameType.*;
 public class DataFormat {
 
     public static final double
-            timeScale = 1.0e4,
+            timeScale = 1.0e3, // should be 1.0e4 in release
             accScale  = 5230.0;//1365.333333333;
 
     static public FrameType[]

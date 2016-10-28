@@ -1,4 +1,4 @@
-package com.probe.usb.host.pc.ui;
+package com.probe.usb.host.pc.ui.controller;
 
 import com.probe.usb.host.commander.ProbeUsbCommander;
 import com.probe.usb.host.common.ConfigCommand;
@@ -15,7 +15,7 @@ import java.util.*;
 
 import static com.probe.usb.host.common.ConfigCommand.*;
 
-public class CommandUiControl {
+public class CommandUiController {
 
     public interface CommandListener {
         void onCommandAdded(ProbeUsbCommander commander);
@@ -26,7 +26,7 @@ public class CommandUiControl {
     private JTextField txtArg;
     private JButton btnSend;
     private ProbeUsbCommander probeCommander;
-    private  CommandListener commandListener;
+    private CommandListener commandListener;
 
     private Map<ConfigCommand, String> lastArguments = new HashMap<>();
 
@@ -42,7 +42,7 @@ public class CommandUiControl {
 
     final static private SimpleDateFormat dateFormat = new SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.ENGLISH);
 
-    public CommandUiControl(JComboBox<String> cboxCommand, JComboBox<String> cboxArgType, JTextField txtArg, JButton btnSend) {
+    public CommandUiController(JComboBox<String> cboxCommand, JComboBox<String> cboxArgType, JTextField txtArg, JButton btnSend) {
         this.cboxCommand = cboxCommand;
         this.cboxArgType = cboxArgType;
         this.txtArg = txtArg;
@@ -61,12 +61,12 @@ public class CommandUiControl {
         setEnabled(cboxCommand.isEnabled());
     }
 
-    public CommandUiControl setCommander(ProbeUsbCommander commander) {
+    public CommandUiController setCommander(ProbeUsbCommander commander) {
         this.probeCommander = commander;
         return this;
     }
 
-    public CommandUiControl setCommandListener(CommandListener commandListener) {
+    public CommandUiController setCommandListener(CommandListener commandListener) {
         this.commandListener = commandListener;
         return this;
     }

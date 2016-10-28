@@ -1,20 +1,21 @@
-package com.probe.usb.host.pc;
+package com.probe.usb.host.pc.controller;
 
 import com.probe.usb.host.parser.ParserEventListener;
+import com.probe.usb.host.pc.Communicator;
 
 import java.util.*;
 
 public class PortScanner extends ParserEventListener {
 
-    interface EnabledInfo {
+    public interface EnabledInfo {
         boolean isEnabled();
     }
 
-    interface Logger {
+    public interface Logger {
         void pintLine(String line);
     }
 
-    interface StatusListener {
+    public interface StatusListener {
         void onConnectionStatusChanged(boolean connected, String portName);
     }
 
@@ -38,7 +39,8 @@ public class PortScanner extends ParserEventListener {
 
     private State state = State.zero;
 
-    private Deque<String> ports = new ArrayDeque<>();
+    private Deque<String> portsToScan = new ArrayDeque<>();
+    private List<String> portNames = new ArrayList<>();
     private Date lastFrameTime = new Date(0L);
 
 
@@ -75,28 +77,31 @@ public class PortScanner extends ParserEventListener {
         lastFrameTime = new Date();
     }
 
-    public void onTimerTick(List<String> portNames) {
+    public void onPortsUpdate(List<String> portNames) {
+        this.portNames = portNames;
+    }
+
+    public void onTimerTick() {
         final boolean isEnabled = enabledInfo != null && enabledInfo.isEnabled();
         if (state == State.zero && !isEnabled)
             return;
         final boolean gotFrames = (lastFrameTime.getTime() + delayMsec > (new Date().getTime()));
         if (state == State.zero) {
-            ports.addAll(portNames);
-            if (!ports.isEmpty()) {
+            if (!portNames.isEmpty()) {
+                portsToScan = new ArrayDeque<>(portNames);
                 updateState(State.havePorts);
-                onTimerTick(Collections.emptyList());
+                onTimerTick();
             }
         } else if (state == State.havePorts) {
-            if (ports.isEmpty() || !isEnabled)
+            if (portsToScan.isEmpty() || !isEnabled)
                 updateState(State.zero);
-            else if (communicator.connect(ports.pollFirst()))
+            else if (communicator.connect(portsToScan.pollFirst()))
                 updateState(State.checkingPort);
             else
-                onTimerTick(Collections.emptyList());
+                onTimerTick();
         } else if (state == State.checkingPort)
             updateState( !isEnabled? State.zero :       gotFrames? State.haveData :         State.havePorts);
         else if (state == State.haveData)
             updateState( !isEnabled? State.zero :       gotFrames? State.haveData :         State.checkingPort);
     }
-
 }
