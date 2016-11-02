@@ -1,10 +1,8 @@
 package com.probe.usb.host.pc.controller;
 
-
 import java.io.IOException;
 
 public class TextOutputWriter extends OutputWriter {
-
 
     protected int lineCount = 0;
 
@@ -20,6 +18,12 @@ public class TextOutputWriter extends OutputWriter {
             if (line.charAt(i) == '\n')
                 lineCount++;
         return true;
+    }
+
+    @Override
+    protected void openFile() throws IOException {
+        lineCount = 0;
+        super.openFile();
     }
 
     public int getLineCount() {

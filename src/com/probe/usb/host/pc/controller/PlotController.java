@@ -1,12 +1,15 @@
 package com.probe.usb.host.pc.controller;
 
+import com.google.common.eventbus.Subscribe;
+import com.probe.usb.host.bus.Receiver;
 import com.probe.usb.host.parser.internal.DataPoint;
+import com.probe.usb.host.pc.controller.event.NewDataTrackEvent;
 import com.probe.usb.host.pc.plot.Plot;
 
 import java.util.ArrayList;
 import java.util.List;
 
-public class PlotController {
+public class PlotController extends Receiver {
 
     public interface PlotDataListener {
         void setPlotData(List<Plot.Point> px, List<Plot.Point> py, List<Plot.Point> pz, List<Double> verticalLines);
@@ -81,7 +84,8 @@ public class PlotController {
         plotTimeMax = Math.max(plotTimeMax, plotTime);
     }
 
-    public void resetPlot() {
+    @Subscribe
+    public void resetPlot(NewDataTrackEvent event) {
         px.clear();
         py.clear();
         pz.clear();
@@ -95,7 +99,9 @@ public class PlotController {
     }
 
     public void setTimeSpanRatio(double ratio) {
-        this.tspan = maxTimeSpan * ratio;
+        ratio = Math.max(0.001, ratio);
+        ratio = Math.min(1.0, ratio);
+        this.tspan = plotTimeMax * ratio;
         shouldUpdatePlot = true;
     }
 

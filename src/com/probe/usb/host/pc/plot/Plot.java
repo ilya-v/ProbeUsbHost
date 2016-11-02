@@ -22,6 +22,7 @@ public class Plot extends JFrame {
     public Plot() {
         add(plotPanel);
         this.setAlwaysOnTop(true);
+
         pack();
     }
 
@@ -30,13 +31,6 @@ public class Plot extends JFrame {
     }
 
     static private Color[] colors = {Color.BLACK, Color.RED, Color.BLUE, Color.GREEN};
-
-    public interface Logger { void print(String line); }
-    private Logger logger;
-    public Plot setLogger(Logger logger) {
-        this.logger = logger;
-        return this;
-    }
 
     private double
             startRealX = 0.0,

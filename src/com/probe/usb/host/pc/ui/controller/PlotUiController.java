@@ -45,7 +45,7 @@ public class PlotUiController {
     }
 
     public void onXSliderChange() {
-        plotController.setTimeSpanRatio(xSlider.getValue() / (double)xSlider.getMaximum() * 2);
+        plotController.setTimeSpanRatio(xSlider.getValue() / (double) xSlider.getMaximum());
     }
 
     public void onySliderChange() {

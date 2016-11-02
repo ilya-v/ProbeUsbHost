@@ -1,7 +1,7 @@
 package com.probe.usb.host.pc.ui;
 
 
-public class LookAndFeel {
+public class UiLookAndFeel {
 
     static public void init() {
         try {

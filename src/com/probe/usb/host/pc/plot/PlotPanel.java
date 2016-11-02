@@ -7,6 +7,7 @@ public class PlotPanel extends JPanel {
 
     public PlotPanel() {
         setBorder(BorderFactory.createLineBorder(Color.black));
+        setBackground(Color.WHITE);
     }
 
     @Override

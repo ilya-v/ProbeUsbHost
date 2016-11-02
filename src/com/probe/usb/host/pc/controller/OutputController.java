@@ -1,34 +1,36 @@
 package com.probe.usb.host.pc.controller;
 
+import com.google.common.eventbus.Subscribe;
+import com.probe.usb.host.bus.Receiver;
 import com.probe.usb.host.parser.ProbeUsbParser;
 import com.probe.usb.host.parser.processor.PrintProcessor;
 import com.probe.usb.host.parser.processor.TablePrintProcessor;
 import com.probe.usb.host.pc.Preferences;
+import com.probe.usb.host.pc.controller.event.*;
 
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
-public class OutputController {
+public class OutputController extends Receiver {
 
     public enum OutputChannel {
         RAW_DATA("raw-", ".bin"),
         ACC_DATA("acc-", ".txt"),
-        MSG_DATA("msg-", ".txt"),
-        ;
+        MSG_DATA("msg-", ".txt"),;
 
         final public String filePrefix, fileSuffix;
+
         OutputChannel(String filePrefix, String fileSuffix) {
             this.filePrefix = filePrefix;
             this.fileSuffix = fileSuffix;
         }
-    };
+    }
 
     private Preferences preferences;
+
     public OutputController setPreferences(Preferences preferences) {
         this.preferences = preferences;
-        setOutputDir(preferences.getOutputDirectory());
+        this.outputDir = preferences.getOutputDirectory();
         return this;
     }
 
@@ -39,30 +41,16 @@ public class OutputController {
     }
 
     private String outputDir;
-    public void setOutputDir(String outputDir) {
-        final String oldDir = this.outputDir;
-        this.outputDir = outputDir;
+
+    @Subscribe
+    public void setOutputDir(UiOutputDirEvent outputDirEvent) {
+        final String oldDir = outputDir;
+        outputDir = outputDirEvent.getDirectory();
         accWriter.setOutputDir(outputDir);
         rawWriter.setOutputDir(outputDir);
         msgWriter.setOutputDir(outputDir);
         if (oldDir == null || !oldDir.equals(outputDir))
-            forceNewFiles();
-    }
-
-    public interface FileStatusListener {
-        void onFileStatus(OutputChannel chan, String fileName, String fileSize);
-    }
-    private FileStatusListener fileStatusListener;
-    public OutputController setFileStatusListener(FileStatusListener listener) {
-        this.fileStatusListener = listener;
-        return this;
-    }
-
-    public interface Logger { void print(String line); }
-    private Logger logger;
-    public OutputController setLogger(Logger logger) {
-        this.logger = logger;
-        return this;
+            forceNewFiles(null);
     }
 
     private Map<OutputChannel, Long> counts = new HashMap<>();
@@ -83,70 +71,68 @@ public class OutputController {
     private OutputWriter msgWriter = new TextOutputWriter()
             .setFileName(OutputChannel.MSG_DATA.filePrefix, OutputChannel.MSG_DATA.fileSuffix);
 
-    private List<Byte> outputBytes = new ArrayList<>();
 
-    public void addNewByte(int b) {
-        outputBytes.add((byte)b);
+    @Subscribe
+    public void addBytes(ComPortDataEvent bytes) {
+        byte[] accBytes = tablePrintProcessor.popResult().getBytes();
+        if (accBytes.length > 0) {
+            accWriter.write(accBytes);
+            updateFileStatus(OutputChannel.ACC_DATA, accWriter);
+        }
+
+        final String line = msgPrintProcessor.popResult();
+        if (!line.isEmpty()) {
+            msgWriter.write(line.getBytes());
+            postEvent(new InfoLogEvent(line));
+            updateFileStatus(OutputChannel.MSG_DATA, msgWriter);
+        }
+
+        rawWriter.write(bytes.getPortData());
+        if (bytes.getPortData().length > 0)
+            updateFileStatus(OutputChannel.RAW_DATA, rawWriter);
     }
 
 
     private void updateFileStatus(OutputChannel chan, OutputWriter writer) {
         final long
-                storedN = counts.get(chan) == null? 0 : counts.get(chan),
+                storedN = counts.get(chan) == null ? 0 : counts.get(chan),
                 actualN = (writer instanceof TextOutputWriter) ?
-                        ((TextOutputWriter)writer).getLineCount() :  writer.getCurrentByteCount();
+                        ((TextOutputWriter) writer).getLineCount() : writer.getCurrentByteCount();
         final String actualName = writer.getCurrentFileName();
 
         final boolean fileNameChanged = actualName != null
-                    && !actualName.equals(preferences.getLastFileName(chan.name()));
+                && !actualName.equals(preferences.getLastFileName(chan.name()));
         if (fileNameChanged)
             preferences.saveLastFileName(chan.name(), actualName);
 
         if (actualName != null && (actualN != storedN || fileNameChanged)) {
             String fname = actualName.replaceFirst(this.outputDir, "");
             final boolean slash = fname.startsWith("/") || fname.startsWith("\\");
-            fname = fname.substring(slash? 1: 0);
-            fileStatusListener.onFileStatus(chan, fname, Long.toString(actualN));
+            fname = fname.substring(slash ? 1 : 0);
+            postEvent(new UiOutputFileStatusCommand(chan, fname, Long.toString(actualN)));
         }
 
         counts.put(chan, actualN);
     }
 
-    public void forceNewFiles() {
+    @Subscribe
+    public void forceNewFiles(NewDataTrackEvent event) {
         accWriter.forceNewFile();
         rawWriter.forceNewFile();
         msgWriter.forceNewFile();
-        tick();
-    }
-
-
-    public void tick() {
-        accWriter.write(tablePrintProcessor.popResult().getBytes());
         updateFileStatus(OutputChannel.ACC_DATA, accWriter);
-
-        final String line = msgPrintProcessor.popResult();
-        msgWriter.write(line.getBytes());
         updateFileStatus(OutputChannel.MSG_DATA, msgWriter);
-        if (!line.isEmpty())
-            logger.print(line);
-
-        byte[] arrBytes = new byte[outputBytes.size()];
-        int i = 0;
-        for (Byte b: outputBytes) {
-            arrBytes[i] = b;
-            i++;
-        }
-        outputBytes = new ArrayList<>();
-        rawWriter.write(arrBytes);
         updateFileStatus(OutputChannel.RAW_DATA, rawWriter);
     }
 
-    public void setChannelEnabled(OutputChannel channel, boolean enabled) {
-        OutputWriter ow = (channel == OutputChannel.ACC_DATA)? accWriter :
-                (channel == OutputChannel.RAW_DATA) ? rawWriter :
-                        (channel == OutputChannel.MSG_DATA)? msgWriter :
+
+    @Subscribe
+    public void setChannelEnabled(UiOutputChanEnabledEvent chanEvent) {
+        OutputWriter ow =   (chanEvent.getChan() == OutputChannel.ACC_DATA) ? accWriter :
+                            (chanEvent.getChan() == OutputChannel.RAW_DATA) ? rawWriter :
+                            (chanEvent.getChan() == OutputChannel.MSG_DATA) ? msgWriter :
                                 null;
         if (ow != null)
-            ow.setEnabled(enabled);
+            ow.setEnabled(chanEvent.getEnabled());
     }
 }

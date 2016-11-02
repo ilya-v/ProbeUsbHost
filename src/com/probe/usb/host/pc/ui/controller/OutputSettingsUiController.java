@@ -1,19 +1,21 @@
 package com.probe.usb.host.pc.ui.controller;
 
 
+import com.google.common.eventbus.Subscribe;
+import com.probe.usb.host.Context;
+import com.probe.usb.host.bus.UiReceiver;
 import com.probe.usb.host.pc.Preferences;
-import com.probe.usb.host.pc.controller.OutputController;
 import com.probe.usb.host.pc.controller.OutputController.OutputChannel;
+import com.probe.usb.host.pc.controller.event.UiOutputChanEnabledEvent;
+import com.probe.usb.host.pc.controller.event.UiOutputDirEvent;
+import com.probe.usb.host.pc.controller.event.UiOutputFileStatusCommand;
 
 import javax.swing.*;
-
 import java.util.HashMap;
 
-import static com.probe.usb.host.pc.controller.OutputController.OutputChannel.ACC_DATA;
-import static com.probe.usb.host.pc.controller.OutputController.OutputChannel.MSG_DATA;
-import static com.probe.usb.host.pc.controller.OutputController.OutputChannel.RAW_DATA;
+import static com.probe.usb.host.pc.controller.OutputController.OutputChannel.*;
 
-public class OutputSettingsUiController {
+public class OutputSettingsUiController extends UiReceiver {
 
     private JButton btnChooseOutputDir;
     private JTextField txtOutputDir;
@@ -22,12 +24,6 @@ public class OutputSettingsUiController {
     private JTextField txtRawFile, txtAccFile, txtMessagesFile;
     private JLabel labelRaw, labelAcc, labelMessages;
     private JToggleButton btnRaw, btnAcc, btnMessages;
-
-    private OutputController outputController;
-    public OutputSettingsUiController setOutputController(OutputController outputController) {
-        this.outputController = outputController;
-        return this;
-    }
 
     private HashMap<OutputChannel, Boolean> channels = new HashMap<>();
 
@@ -62,17 +58,17 @@ public class OutputSettingsUiController {
         this.labelRaw = labelRaw;
         this.labelAcc = labelAcc;
 
+        Context.invokeUi(this::uiUpdateChannels);
+
         this.txtOutputDir.setText(preferences.getOutputDirectory());
-        btnChooseOutputDir.addActionListener(e -> chooseOutputDir());
-
-        channels.put(ACC_DATA, btnAcc.isSelected());
-        channels.put(RAW_DATA, btnRaw.isSelected());
-        channels.put(MSG_DATA, btnRaw.isSelected());
-
-        btnRaw.addActionListener(e -> aButtonToggled());
+        postEvent(new UiOutputDirEvent(preferences.getOutputDirectory()));
+        btnChooseOutputDir.addActionListener(e -> uiChooseOutputDir());
+        btnAcc.addActionListener(e -> uiUpdateChannels());
+        btnRaw.addActionListener(e -> uiUpdateChannels());
+        btnMessages.addActionListener(e -> uiUpdateChannels());
     }
 
-    private void chooseOutputDir() {
+    private void uiChooseOutputDir() {
         final JFileChooser fc = new JFileChooser();
         fc.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
         if (fc.showSaveDialog(btnChooseOutputDir) != JFileChooser.APPROVE_OPTION)
@@ -81,33 +77,35 @@ public class OutputSettingsUiController {
         final String selectedFolder = fc.getSelectedFile().getAbsolutePath();
         txtOutputDir.setText(selectedFolder);
         preferences.saveOutputDirectory(selectedFolder);
-        outputController.setOutputDir(selectedFolder);
+        postEvent(new UiOutputDirEvent(selectedFolder));
     }
 
-    public void onFileStatus(OutputChannel chan, String fileName, String fileSize) {
+    @Subscribe
+    public void onFileStatus(UiOutputFileStatusCommand fileStatusCommand) {
+        final OutputChannel chan = fileStatusCommand.getChan();
         JTextField txt =
                 (chan == ACC_DATA)? txtAccFile :
                 (chan == RAW_DATA)? txtRawFile :
                 (chan == MSG_DATA)? txtMessagesFile : null;
         if (txt != null)
-            txt.setText(fileName);
+            Context.invokeUi(() -> txt.setText(fileStatusCommand.getFileName()));
         JLabel label =
                 (chan == ACC_DATA)? labelAcc :
                 (chan == RAW_DATA)? labelRaw :
                 (chan == MSG_DATA)? labelMessages : null;
         if (label != null)
-            label.setText(fileSize);
+            Context.invokeUi(() -> label.setText(fileStatusCommand.getFileSize()));
     }
 
-    private void probeChannel(OutputChannel chan, JToggleButton button) {
+    private void uiUpdateChannel(OutputChannel chan, JToggleButton button) {
         if (!channels.containsKey(chan) || !channels.get(chan).equals(button.isSelected()))
-            outputController.setChannelEnabled(chan, button.isSelected());
+            postEvent(new UiOutputChanEnabledEvent(chan, button.isSelected()));
         channels.put(chan, button.isSelected());
     }
 
-    private void aButtonToggled() {
-        probeChannel(ACC_DATA, btnAcc);
-        probeChannel(RAW_DATA, btnRaw);
-        probeChannel(MSG_DATA, btnMessages);
+    private void uiUpdateChannels() {
+        uiUpdateChannel(ACC_DATA, btnAcc);
+        uiUpdateChannel(RAW_DATA, btnRaw);
+        uiUpdateChannel(MSG_DATA, btnMessages);
     }
 }

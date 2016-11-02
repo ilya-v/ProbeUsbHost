@@ -1,9 +1,14 @@
 package com.probe.usb.host.pc.ui.controller;
 
+import com.google.common.eventbus.Subscribe;
+import com.google.common.primitives.Ints;
+import com.probe.usb.host.bus.UiReceiver;
 import com.probe.usb.host.commander.ProbeUsbCommander;
 import com.probe.usb.host.common.ConfigCommand;
 import com.probe.usb.host.common.ConfigParamType;
 import com.probe.usb.host.parser.internal.message.AccLis331Register;
+import com.probe.usb.host.pc.controller.event.SendDataToDeviceCommand;
+import com.probe.usb.host.pc.controller.event.UiCommandEnableCommand;
 
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
@@ -15,18 +20,13 @@ import java.util.*;
 
 import static com.probe.usb.host.common.ConfigCommand.*;
 
-public class CommandUiController {
-
-    public interface CommandListener {
-        void onCommandAdded(ProbeUsbCommander commander);
-    }
+public class CommandUiController extends UiReceiver {
 
     private JComboBox<String> cboxCommand;
     private JComboBox<String> cboxArgType;
     private JTextField txtArg;
     private JButton btnSend;
     private ProbeUsbCommander probeCommander;
-    private CommandListener commandListener;
 
     private Map<ConfigCommand, String> lastArguments = new HashMap<>();
 
@@ -66,10 +66,6 @@ public class CommandUiController {
         return this;
     }
 
-    public CommandUiController setCommandListener(CommandListener commandListener) {
-        this.commandListener = commandListener;
-        return this;
-    }
 
     private void adjustArgTypeModel() {
         final ConfigCommand command = ((CmdComboItem)cboxCommand.getSelectedItem()).getCommand();
@@ -84,6 +80,11 @@ public class CommandUiController {
 
     private boolean useArgFromSelection() {
         return getSelectedCommand().equals(readConfig) || getSelectedCommand().equals(accRegRead);
+    }
+
+    @Subscribe
+    public void setEnabled(UiCommandEnableCommand event) {
+        setEnabled(event.getEnabled());
     }
 
     public void setEnabled(final boolean enabled) {
@@ -184,6 +185,9 @@ public class CommandUiController {
             probeCommander.deviceCommand(getSelectedCommand().getFirstByte(),
                     (ConfigParamType) cboxArgType.getSelectedItem(), argument);
 
-        commandListener.onCommandAdded(probeCommander);
+        List<Integer>  bytes = new ArrayList<>();
+        for (int b; (b = probeCommander.popOutputByte()) != -1;)
+            bytes.add(b);
+        postEvent(new SendDataToDeviceCommand(Ints.toArray(bytes)));
     }
 }

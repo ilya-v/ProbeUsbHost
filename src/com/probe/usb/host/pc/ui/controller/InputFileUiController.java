@@ -1,15 +1,21 @@
 package com.probe.usb.host.pc.ui.controller;
 
+import com.google.common.eventbus.Subscribe;
+import com.probe.usb.host.Context;
+import com.probe.usb.host.bus.UiReceiver;
 import com.probe.usb.host.pc.Preferences;
+import com.probe.usb.host.pc.controller.event.OpenRawInputFileCommand;
+import com.probe.usb.host.pc.controller.event.UiInputBusyCommand;
+import com.probe.usb.host.pc.controller.event.UiInputFileActiveEvent;
 
 import javax.swing.*;
 import java.io.File;
 
-public class InputFileUiController {
+public class InputFileUiController extends UiReceiver {
 
-    private JToggleButton btnInputFromFile;
-    private JButton btnChooseInputFile;
-    private JTextField txtInputDataFile;
+    private JToggleButton uiBtnInputFromFile;
+    private JButton uiBtnChooseInputFile;
+    private JTextField uiTxtInputDataFile;
 
     private Preferences preferences;
     public InputFileUiController setPreferences(Preferences preferences) {
@@ -17,39 +23,23 @@ public class InputFileUiController {
         return this;
     }
 
-    public interface StateListener {  void onActiveStatusChanged(boolean active); }
-    private StateListener stateListener;
-
-    public interface OpenFileListener{ void onInputFileOpen(String fileName); }
-    private OpenFileListener openFileListener;
-
-    public InputFileUiController setStateListener(StateListener stateListener) {
-        this.stateListener = stateListener;
-        return this;
-    }
-
-    public InputFileUiController setOpenFileListener(OpenFileListener openFileListener) {
-        this.openFileListener = openFileListener;
-        return this;
-    }
-
     public InputFileUiController(JToggleButton btnInputFromFile,
                                  JButton btnChooseInputFile, JTextField txtInputDataFile) {
-        this.btnInputFromFile = btnInputFromFile;
-        this.btnChooseInputFile = btnChooseInputFile;
-        this.txtInputDataFile = txtInputDataFile;
+        this.uiBtnInputFromFile = btnInputFromFile;
+        this.uiBtnChooseInputFile = btnChooseInputFile;
+        this.uiTxtInputDataFile = txtInputDataFile;
 
-        this.btnChooseInputFile.setEnabled(this.btnInputFromFile.isSelected());
+        this.uiBtnChooseInputFile.setEnabled(this.uiBtnInputFromFile.isSelected());
 
-        btnInputFromFile.addActionListener(e -> btnInputFromFileEvent());
-        btnChooseInputFile.addActionListener(e -> btnChooseInputFileEvent());
+        this.uiBtnInputFromFile.addActionListener(e -> btnInputFromFileEvent());
+        this.uiBtnChooseInputFile.addActionListener(e -> btnChooseInputFileEvent());
     }
 
     private void btnInputFromFileEvent() {
-        btnChooseInputFile.setEnabled(btnInputFromFile.isSelected());
-        stateListener.onActiveStatusChanged(btnInputFromFile.isSelected());
-        if (!btnInputFromFile.isSelected())
-            txtInputDataFile.setText("");
+        uiBtnChooseInputFile.setEnabled(uiBtnInputFromFile.isSelected());
+        postEvent(new UiInputFileActiveEvent(uiBtnInputFromFile.isSelected()));
+        if (!uiBtnInputFromFile.isSelected())
+            uiTxtInputDataFile.setText("");
     }
 
     private void btnChooseInputFileEvent() {
@@ -58,12 +48,21 @@ public class InputFileUiController {
         String lastDir = preferences.getLastFileName(itemName);
         if (lastDir != null)
             fc.setCurrentDirectory(new File(lastDir));
-        if (fc.showOpenDialog(btnChooseInputFile) != JFileChooser.APPROVE_OPTION)
+        if (fc.showOpenDialog(uiBtnChooseInputFile) != JFileChooser.APPROVE_OPTION)
             return;
         String path = fc.getSelectedFile().getAbsolutePath();
         preferences.saveLastFileName(itemName, fc.getSelectedFile().getParent());
-        txtInputDataFile.setText(path);
-        openFileListener.onInputFileOpen(path);
+        uiTxtInputDataFile.setText(path);
+
+        postEvent(new OpenRawInputFileCommand(path));
+    }
+
+    @Subscribe
+    void onBusy(UiInputBusyCommand busyCommand) {
+        Context.invokeUi( () -> {
+            uiBtnChooseInputFile.setEnabled(!busyCommand.getBusy());
+            uiBtnInputFromFile.setEnabled(!busyCommand.getBusy());
+        });
     }
 
 }

@@ -1,30 +1,26 @@
 package com.probe.usb.host.pc.ui.controller;
 
 
+import com.google.common.eventbus.Subscribe;
+import com.probe.usb.host.bus.UiReceiver;
 import com.probe.usb.host.pc.controller.ConnectionStatus;
+import com.probe.usb.host.pc.controller.event.*;
 import com.probe.usb.host.pc.ui.ConnectionStatusUiPropeties;
 
 import javax.swing.*;
-import java.util.*;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
-public class PortScanUiController {
+public class PortScanUiController extends UiReceiver {
     private JComboBox<String> cboxPorts;
     private JToggleButton autoButton;
     private JLabel connectionIndicator;
 
-    Set<String> portNames = new HashSet<>();
+    private Set<String> portNames = new HashSet<>();
 
-    public interface Logger { void print(String line);  }
-    private Logger logger;
-    public PortScanUiController setLogger(Logger logger) {
-        this.logger = logger;
-        return this;
-    }
-    public interface ConnectionCommandListener { void setConnection(String port, boolean status); }
-    private ConnectionCommandListener connectionCommandListener;
-    public PortScanUiController setConnectionCommandListener(ConnectionCommandListener listener) {
-        this.connectionCommandListener = listener;
-        return this;
+    private void connectionCommand(String port, boolean connect) {
+        postEvent(new ComPortConnectCommand(port, connect));
     }
 
     public PortScanUiController(JComboBox<String> cboxPorts, JToggleButton autoButton, JLabel connectionIndicator) {
@@ -32,47 +28,62 @@ public class PortScanUiController {
         this.autoButton = autoButton;
         this.connectionIndicator = connectionIndicator;
         cboxPorts.addActionListener(e -> onPortsCboxEvent());
-        autoButton.addActionListener(e -> onAutoButtonEvent());
+        autoButton.addActionListener(e -> {
+            postEvent(new PortScannerEnableEvent(autoButton.isSelected()));});
+        autoButton.addActionListener(e->onAutoButtonEvent());
+
+        postEvent(new ComPortsListCommand());
+    }
+
+    @Subscribe
+    public void setEnabled(UiPortScanEnabledCommand event) {
+        setEnabled(event.getEnabled());
     }
 
     public void setEnabled(final boolean enabled) {
         if (!enabled && cboxPorts.isEnabled()) {
-            connectionCommandListener.setConnection(null, false);
             cboxPorts.setSelectedItem("");
+            postEvent(new ComPortConnectCommand(null,false));
         }
         cboxPorts.setEnabled(enabled);
         autoButton.setEnabled(enabled);
         autoButton.setSelected(enabled && autoButton.isSelected());
+        postEvent(new PortScannerEnableEvent(enabled && autoButton.isSelected()));
     }
 
+    @Subscribe
     public void onConnectionStatusChanged(ConnectionStatus status) {
         connectionIndicator.setForeground(ConnectionStatusUiPropeties.getColor(status));
         connectionIndicator.setText(ConnectionStatusUiPropeties.getText(status));
     }
 
-    public void onAutoButtonEvent() {
+    private void onAutoButtonEvent() {
         cboxPorts.setEnabled( !autoButton.isSelected() );
         final String portName = (String) cboxPorts.getSelectedItem();
-        connectionCommandListener.setConnection(portName,  !autoButton.isSelected() && !portName.isEmpty());
+        connectionCommand(portName, !autoButton.isSelected() && !portName.isEmpty());
     }
 
-    public void onPortsCboxEvent() {
+    private void onPortsCboxEvent() {
         if (autoButton.isSelected() || !autoButton.isEnabled())
             return;
-        connectionCommandListener.setConnection(null, false);
+        connectionCommand(null, false);
         if (cboxPorts.getSelectedItem() == null)
             return;
         String port = String.valueOf(cboxPorts.getSelectedItem());
         if (!port.isEmpty())
-            connectionCommandListener.setConnection(port, true);
+            connectionCommand(port, true);
     }
 
-    public void onConnectedEvent(boolean connected, String portName) {
-        cboxPorts.setSelectedItem(connected? portName : "");
+    @Subscribe
+    public void onConnectedEvent(ComPortConnectionEvent event) {
+        final String newSelectedItem = event.getConnectionStatus()? event.getPortName() : "";
+        if (!newSelectedItem.equals(String.valueOf(cboxPorts.getSelectedItem())))
+            cboxPorts.setSelectedItem(newSelectedItem);
     }
 
-    public void onPortsUpdateEvent(List<String> portNames) {
-
+    @Subscribe
+    public void onPortsUpdateEvent(ComPortHasPortsEvent event) {
+        List<String> portNames = event.getPorts();
         if (cboxPorts.isPopupVisible() || this.portNames.containsAll(portNames))
             return;
 

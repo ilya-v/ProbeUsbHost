@@ -1,11 +1,16 @@
 package com.probe.usb.host.pc.controller;
 
 
-import java.io.*;
+import com.probe.usb.host.bus.Receiver;
+import com.probe.usb.host.pc.controller.event.InfoLogEvent;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
-public class OutputWriter {
+public class OutputWriter extends Receiver {
 
     protected String outputDir = "";
     protected String
@@ -72,8 +77,11 @@ public class OutputWriter {
     }
 
     public void tick() throws IOException {
-        if (lastWriteTime.getTime() + fileDelayMs < new Date().getTime())
+        if (lastWriteTime.getTime() + fileDelayMs < new Date().getTime() && fileOutputStream != null) {
+            System.out.println("OutputWriter: time gap " + lastWriteTime);
+            System.out.println(new Date());
             closeFile();
+        }
 
     }
 
@@ -82,6 +90,7 @@ public class OutputWriter {
         currentFileName = makeFileName();
         fileOutputStream = new FileOutputStream(currentFileName);
         count = 0;
+        postEvent(new InfoLogEvent("OutputWriter: new file " + currentFileName));
     }
 
     public String getCurrentFileName() {
@@ -96,6 +105,7 @@ public class OutputWriter {
         fileOutputStream.close();
         fileOutputStream = null;
         currentFileName = null;
+        System.out.println("Output writer: file closed");
     }
 
     protected String makeFileName() {
