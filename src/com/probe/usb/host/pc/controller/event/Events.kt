@@ -49,3 +49,6 @@ data class UiOutputFileStatusCommand(val chan : OutputController.OutputChannel,
                                      val fileSize : String)
 data class UiOutputChanEnabledEvent(val chan : OutputController.OutputChannel, val enabled: Boolean)
 data class UiOutputDirEvent(val directory : String)
+
+data class UiPlotResizedEvent(val w : Int, val h: Int)
+data class UiPlotSliderEvent(val kx : Double, val ky : Double)

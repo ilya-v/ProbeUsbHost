@@ -10,7 +10,7 @@ import java.util.Map;
 
 public class Plot extends JFrame {
 
-    protected PlotPanel plotPanel = new PlotPanel() {
+    private PlotPanel plotPanel = new PlotPanel() {
         @Override
         public void paintComponent(Graphics graphics) {
             super.paintComponent(graphics);
@@ -18,19 +18,41 @@ public class Plot extends JFrame {
         }
     };
 
-
     public Plot() {
         add(plotPanel);
         this.setAlwaysOnTop(true);
-
         pack();
     }
+
+    static private class Line {
+        public int color;
+        //double
+
+    }
+
+
+    public int getWidth() {
+        return plotPanel.getWidth() - getInsets().left - getInsets().right;
+    }
+    public int getHeight() {
+        return plotPanel.getHeight() - getInsets().top - getInsets().bottom;
+    }
+
+    public void addPoint(int color, int x, int y) {
+
+    }
+
+
+    private Map<Integer, List<Point>> plots = new HashMap<>(0);
+    private List<Double> verticalLinesPosX = new ArrayList<>();
+    //private List<>
+
 
     static public class Point{ double x, y;
         public Point(double x, double y) { this.x = x; this.y = y; }
     }
 
-    static private Color[] colors = {Color.BLACK, Color.RED, Color.BLUE, Color.GREEN};
+
 
     private double
             startRealX = 0.0,
@@ -38,8 +60,7 @@ public class Plot extends JFrame {
             startRealY = -10.0,
             endRealY = 10.0;
 
-    private Map<Integer, List<Point>> plots = new HashMap<>(0);
-    private List<Double> verticalLinesPosX = new ArrayList<>();
+
 
     public void draw(Graphics2D graph, Dimension dim, Insets insets) {
 

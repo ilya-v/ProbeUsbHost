@@ -37,6 +37,10 @@ public class ProbeMainWindow extends JFrame {
     public JLabel lblPictures;
     public JSlider plotSliderX;
     public JSlider plotSliderY;
+    private JToggleButton fitXToggleButton;
+    private JToggleButton fitYToggleButton;
+    private JToggleButton btnTrigger;
+    private JSlider plotSliderTrig;
 
     public void createUIComponents() {
         // TODO: place custom component creation code here
