@@ -1,18 +1,24 @@
 package com.probe.usb.test;
 
+import com.google.common.io.ByteStreams;
 import com.probe.usb.host.parser.ProbeUsbParser;
+import com.probe.usb.host.parser.internal.DataFormat;
+import com.probe.usb.host.parser.internal.Frame;
+import com.probe.usb.host.parser.internal.FrameDetector;
+import com.probe.usb.host.parser.internal.RobustFrameDetector;
 import com.probe.usb.host.parser.processor.TablePrintProcessor;
-import com.probe.usb.host.parser.internal.*;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 public class ProbeUsbParserTest {
 
@@ -123,13 +129,7 @@ public class ProbeUsbParserTest {
     protected byte[] getCapture() throws IOException {
         final String capturePath = "/cap18.bin";
         InputStream input = this.getClass().getResourceAsStream(capturePath);
-        final int nBytes = this.getClass().getResource(capturePath).getFile().length();
-        byte[] bytes = new byte[nBytes];
-
-        for (int i = 0, b = 0; (b = input.read()) != -1; i++)
-            bytes[i] = (byte)b;
-
-        return bytes;
+        return ByteStreams.toByteArray(input);
     }
 
     protected List<Frame> getFrames(FrameDetector fd, byte[] segment) {

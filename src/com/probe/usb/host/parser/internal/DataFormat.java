@@ -79,6 +79,10 @@ public class DataFormat {
             unixTimeHiSecondByte = 0x00,
             unixTimeLoSecondByte = 0x01;
 
+    static public DataPoint decodeDataPacket(final int[] packetData) {
+        return decodeDataPacket(packetData, timeScale, accScale);
+    }
+
     static public DataPoint decodeDataPacket(final int[] packetData, double timeScale, double accScale) {
         return new DataPoint(
                 (packetData[0] * 0xFF + packetData[1]) / timeScale, //TODO: how is it actually encoded?

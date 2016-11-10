@@ -23,15 +23,15 @@ object PlotFrame : JFrame() {
     data class Line(val x1 : Int, val y1 : Int, val x2 : Int, val y2 : Int,
                             val color: Int = 0, val width: Float = 1.0f);
 
-    private data class Text(val x : Int, val y : Int, val text: String);
+    data class Text(val x : Int, val y : Int, val text: String);
 
     private val colors = arrayOf(Color.BLACK, Color.RED, Color.BLUE, Color.GREEN, Color.ORANGE, Color.CYAN)
 
     private var lines : MutableList<Line> = ArrayList()
     private var strings : MutableList<Text> = ArrayList()
 
-    private var plotWidth = 0
-    private var plotHeight = 0
+    var plotWidth   = 0
+    var plotHeight  = 0
 
     var onResize : ((width : Int, height: Int) -> Unit)? = null
 
@@ -58,15 +58,11 @@ object PlotFrame : JFrame() {
         }
 
         graphics.setFont(Font("Times New Roman", Font.PLAIN, 12))
-        for (text in strings) {
-            graphics.drawString(text.text, text.x, text.y)
-        }
+        for (text in strings)
+            graphics.drawString(text.text, text.x + insets.left, text.y + insets.top)
     }
 
     fun clear() =  lines.clear()
-
     fun addLine(line : Line)  = lines.add(line)
-
     fun addText(x : Int, y : Int, text : String)  = strings.add(Text(x, y, text))
-
 }

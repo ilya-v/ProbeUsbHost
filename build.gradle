@@ -1,0 +1,47 @@
+
+buildscript {
+    ext.kotlin_version = '1.0.5'
+    repositories {
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+
+    }
+}
+
+apply plugin: 'java'
+apply plugin: 'idea'
+apply plugin: 'kotlin'
+apply plugin: 'application'
+apply plugin: 'maven'
+
+ext {
+    rxtxVersion = "2.2pre2"
+}
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+    maven {
+        name "rxtx"
+        url "https://raw.github.com/grafjo/rxtx/master/releases/"
+    }
+}
+
+sourceSets.main.java        { srcDir 'src' }
+sourceSets.test.java        { srcDir 'test' }
+sourceSets.test.resources   { srcDir 'test-data' }
+
+mainClassName = 'com.probe.usb.host.pc.ProbeUsbHost'
+
+//defaulTasks 'run'
+
+dependencies {
+    compile group: 'com.google.guava', name: 'guava', version: '20.0'
+    compile "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
+    compile "gnu.io:rxtx:$rxtxVersion"
+    testCompile 'junit:junit:4.12'
+    testCompile "org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version"
+}

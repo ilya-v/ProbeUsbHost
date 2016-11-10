@@ -29,6 +29,7 @@ object ComPortController : Receiver() {
             disconnect()
     }
 
+    @Suppress("UNUSED_PARAMETER")
     @Subscribe
     fun onComPortsListCommand(comPortsListCommand: ComPortsListCommand) {
         val portNames = searchForPorts()
@@ -36,6 +37,7 @@ object ComPortController : Receiver() {
 
     }
 
+    @Suppress("UNUSED_PARAMETER")
     @Subscribe
     fun tick(tickEvent : TickEvent) {
         if (serialPort != null)

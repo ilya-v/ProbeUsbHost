@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="probe-usb-host" default="all">
+  
+  
+  <property file="probe-usb-host.properties"/>
+  <!-- Uncomment the following property if no tests compilation is needed -->
+  <!-- 
+  <property name="skip.tests" value="true"/>
+   -->
+  
+  <!-- Compiler options -->
+  
+  <property name="compiler.debug" value="on"/>
+  <property name="compiler.generate.no.warnings" value="off"/>
+  <property name="compiler.args" value=""/>
+  <property name="compiler.max.memory" value="700m"/>
+  <patternset id="ignored.files">
+    <exclude name="**/*.hprof/**"/>
+    <exclude name="**/*.iml/**"/>
+    <exclude name="**/*.pyc/**"/>
+    <exclude name="**/*.pyo/**"/>
+    <exclude name="**/*.rbc/**"/>
+    <exclude name="**/*.yarb/**"/>
+    <exclude name="**/*~/**"/>
+    <exclude name="**/.DS_Store/**"/>
+    <exclude name="**/.git/**"/>
+    <exclude name="**/.hg/**"/>
+    <exclude name="**/.svn/**"/>
+    <exclude name="**/CVS/**"/>
+    <exclude name="**/RCS/**"/>
+    <exclude name="**/SCCS/**"/>
+    <exclude name="**/__pycache__/**"/>
+    <exclude name="**/_svn/**"/>
+    <exclude name="**/rcs/**"/>
+    <exclude name="**/vssver.scc/**"/>
+    <exclude name="**/vssver2.scc/**"/>
+  </patternset>
+  <patternset id="library.patterns">
+    <include name="*.war"/>
+    <include name="*.swc"/>
+    <include name="*.apk"/>
+    <include name="*.zip"/>
+    <include name="*.ear"/>
+    <include name="*.egg"/>
+    <include name="*.ane"/>
+    <include name="*.jar"/>
+  </patternset>
+  <patternset id="compiler.resources">
+    <exclude name="**/?*.java"/>
+    <exclude name="**/?*.form"/>
+    <exclude name="**/?*.class"/>
+    <exclude name="**/?*.groovy"/>
+    <exclude name="**/?*.scala"/>
+    <exclude name="**/?*.flex"/>
+    <exclude name="**/?*.kt"/>
+    <exclude name="**/?*.clj"/>
+    <exclude name="**/?*.aj"/>
+  </patternset>
+  
+  
+  <!-- Project Libraries -->
+  
+  <path id="library.java.classpath">
+    <fileset dir="//usr/share/java">
+      <patternset refid="library.patterns"/>
+    </fileset>
+    <fileset dir="C:/Program Files/Java/jre1.8.0_102/lib">
+      <patternset refid="library.patterns"/>
+    </fileset>
+    <pathelement location="${basedir}/rxtx/RXTXcomm.jar"/>
+  </path>
+  
+  <!-- Modules -->
+  
+  
+  <!-- Module probe-usb-host -->
+  
+  <dirname property="module.probe-usb-host.basedir" file="${ant.file}"/>
+  
+  
+  
+  <property name="compiler.args.probe-usb-host" value="-encoding UTF-8 -source 8 -target 8 ${compiler.args}"/>
+  
+  <property name="probe-usb-host.output.dir" value="${module.probe-usb-host.basedir}/out/production/probe-usb-host"/>
+  <property name="probe-usb-host.testoutput.dir" value="${module.probe-usb-host.basedir}/out/test/probe-usb-host"/>
+  
+  <path id="probe-usb-host.module.bootclasspath">
+    <!-- Paths to be included in compilation bootclasspath -->
+  </path>
+  
+  <path id="probe-usb-host.module.production.classpath">
+    <path refid="library.java.classpath"/>
+  </path>
+  
+  <path id="probe-usb-host.runtime.production.module.classpath">
+    <pathelement location="${probe-usb-host.output.dir}"/>
+    <path refid="library.java.classpath"/>
+  </path>
+  
+  <path id="probe-usb-host.module.classpath">
+    <pathelement location="${probe-usb-host.output.dir}"/>
+    <path refid="library.java.classpath"/>
+  </path>
+  
+  <path id="probe-usb-host.runtime.module.classpath">
+    <pathelement location="${probe-usb-host.testoutput.dir}"/>
+    <pathelement location="${probe-usb-host.output.dir}"/>
+    <path refid="library.java.classpath"/>
+  </path>
+  
+  
+  <patternset id="excluded.from.module.probe-usb-host">
+    <patternset refid="ignored.files"/>
+  </patternset>
+  
+  <patternset id="excluded.from.compilation.probe-usb-host">
+    <patternset refid="excluded.from.module.probe-usb-host"/>
+  </patternset>
+  
+  <path id="probe-usb-host.module.sourcepath">
+    <dirset dir="${module.probe-usb-host.basedir}">
+      <include name="src"/>
+    </dirset>
+  </path>
+  
+  <path id="probe-usb-host.module.test.sourcepath">
+    <dirset dir="${module.probe-usb-host.basedir}">
+      <include name="test"/>
+      <include name="test-data"/>
+    </dirset>
+  </path>
+  
+  
+  <target name="compile.module.probe-usb-host" depends="compile.module.probe-usb-host.production,compile.module.probe-usb-host.tests" description="Compile module probe-usb-host"/>
+  
+  <target name="compile.module.probe-usb-host.production" description="Compile module probe-usb-host; production classes">
+    <mkdir dir="${probe-usb-host.output.dir}"/>
+    <javac destdir="${probe-usb-host.output.dir}" debug="${compiler.debug}" nowarn="${compiler.generate.no.warnings}" memorymaximumsize="${compiler.max.memory}" fork="true">
+      <compilerarg line="${compiler.args.probe-usb-host}"/>
+      <bootclasspath refid="probe-usb-host.module.bootclasspath"/>
+      <classpath refid="probe-usb-host.module.production.classpath"/>
+      <src refid="probe-usb-host.module.sourcepath"/>
+      <patternset refid="excluded.from.compilation.probe-usb-host"/>
+    </javac>
+    
+    <copy todir="${probe-usb-host.output.dir}">
+      <fileset dir="${module.probe-usb-host.basedir}/src">
+        <patternset refid="compiler.resources"/>
+        <type type="file"/>
+      </fileset>
+    </copy>
+  </target>
+  
+  <target name="compile.module.probe-usb-host.tests" depends="compile.module.probe-usb-host.production" description="compile module probe-usb-host; test classes" unless="skip.tests">
+    <mkdir dir="${probe-usb-host.testoutput.dir}"/>
+    <javac destdir="${probe-usb-host.testoutput.dir}" debug="${compiler.debug}" nowarn="${compiler.generate.no.warnings}" memorymaximumsize="${compiler.max.memory}" fork="true">
+      <compilerarg line="${compiler.args.probe-usb-host}"/>
+      <bootclasspath refid="probe-usb-host.module.bootclasspath"/>
+      <classpath refid="probe-usb-host.module.classpath"/>
+      <src refid="probe-usb-host.module.test.sourcepath"/>
+      <patternset refid="excluded.from.compilation.probe-usb-host"/>
+    </javac>
+    
+    <copy todir="${probe-usb-host.testoutput.dir}">
+      <fileset dir="${module.probe-usb-host.basedir}/test">
+        <patternset refid="compiler.resources"/>
+        <type type="file"/>
+      </fileset>
+      <fileset dir="${module.probe-usb-host.basedir}/test-data">
+        <patternset refid="compiler.resources"/>
+        <type type="file"/>
+      </fileset>
+    </copy>
+  </target>
+  
+  <target name="clean.module.probe-usb-host" description="cleanup module">
+    <delete dir="${probe-usb-host.output.dir}"/>
+    <delete dir="${probe-usb-host.testoutput.dir}"/>
+  </target>
+  
+  <target name="init" description="Build initialization">
+    <!-- Perform any build initialization in this target -->
+  </target>
+  
+  <target name="clean" depends="clean.module.probe-usb-host" description="cleanup all"/>
+  
+  <target name="build.modules" depends="init, clean, compile.module.probe-usb-host" description="build all modules"/>
+  
+  <target name="all" depends="build.modules" description="build all"/>
+</project>

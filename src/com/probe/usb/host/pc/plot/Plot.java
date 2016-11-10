@@ -63,7 +63,7 @@ public class Plot extends JFrame {
 
 
     public void draw(Graphics2D graph, Dimension dim, Insets insets) {
-
+/*
         for (int index: plots.keySet()) {
             final int colorIndex = index % colors.length;
             final List<Point> points = plots.get(index);
@@ -90,6 +90,7 @@ public class Plot extends JFrame {
                 graph.drawLine(x, insets.top, x, dim.height -insets.bottom);
             }
         }
+        */
     }
 
     public void setRealX(double startRealX, double endRealX) {

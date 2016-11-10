@@ -3,7 +3,7 @@ package com.probe.usb.host.pc;
 import com.probe.usb.host.bus.Bus;
 import com.probe.usb.host.commander.ProbeUsbCommander;
 import com.probe.usb.host.parser.ProbeUsbParser;
-import com.probe.usb.host.parser.processor.PlotProcessor;
+import com.probe.usb.host.parser.processor.KPlotProcessor;
 import com.probe.usb.host.pc.controller.*;
 import com.probe.usb.host.pc.controller.event.ComPortConnectCommand;
 import com.probe.usb.host.pc.controller.event.EventDispatcher;
@@ -32,7 +32,7 @@ public class ProbeGUI {
     private ProbeMainWindow ui = new ProbeMainWindow();
 
     {
-        EventBusSpy.INSTANCE.setActive(true);
+        //EventBusSpy.INSTANCE.setActive(true);
         ComPortController.INSTANCE.setActive(true);
         InputFileController.INSTANCE.setActive(true);
         KConnectionStateController.INSTANCE.setActive(true);
@@ -40,34 +40,14 @@ public class ProbeGUI {
         LoggerUiController.INSTANCE.setActive(true);
         Logger.INSTANCE.setActive(true);
         ParserController.INSTANCE.setActive(true);
+        KPlotUiController.INSTANCE.setActive(true);
         EventDispatcher.INSTANCE.setActive(true);
     }
 
 
     private Preferences preferences = new Preferences();
 
-    private PlotController plotController = new PlotController()
-            .setPlotDataListener(new PlotController.PlotDataListener() {
-                @Override
-                public void setPlotData(List<Plot.Point> px, List<Plot.Point> py, List<Plot.Point> pz, List<Double> verticalLines) {
-                    plotUiController.setPlotData(px, py, pz, verticalLines);
-                }
-
-                @Override
-                public void setPlotBounds(double x0, double y0, double xz, double yz) {
-                    plotUiController.setPlotBounds(x0, y0, xz, yz);
-                }
-
-                @Override
-                public void reset() {
-                    plotUiController.reset();
-                }
-            });
-
-    private PlotProcessor plotProcessor = new PlotProcessor().setPointsListener(plotController::onNewPoint);
-
-    private ProbeUsbParser parser = new ProbeUsbParser().addPacketProcessor(plotProcessor);
-
+    private ProbeUsbParser parser = new ProbeUsbParser().addPacketProcessor(KPlotProcessor.INSTANCE);
 
     private ProbeUsbCommander probeCommander = new ProbeUsbCommander();
 
@@ -90,7 +70,6 @@ public class ProbeGUI {
 
     Timer timer = new Timer(1000, e -> {
         Bus.post(new TickEvent());
-        plotController.tick();
     });
 
 
@@ -106,10 +85,6 @@ public class ProbeGUI {
         LoggerUiController.INSTANCE.setLogTextArea(ui.sendLog);
         timer.start();
     }
-
-    private PlotUiController plotUiController = new PlotUiController(plot,
-            ui.plotButton, ui.plotSliderX, ui.plotSliderY)
-            .setPlotController(plotController);
 
     public ProbeGUI() {
         ui.btnChooseCommandFile.addActionListener(this::selectCommandFileButtonActionPerformed);

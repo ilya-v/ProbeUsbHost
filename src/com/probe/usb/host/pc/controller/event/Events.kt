@@ -1,5 +1,6 @@
 package com.probe.usb.host.pc.controller.event
 
+import com.probe.usb.host.parser.internal.DataPoint
 import com.probe.usb.host.pc.controller.KPortScanner
 import com.probe.usb.host.pc.controller.OutputController
 
@@ -52,3 +53,10 @@ data class UiOutputDirEvent(val directory : String)
 
 data class UiPlotResizedEvent(val w : Int, val h: Int)
 data class UiPlotSliderEvent(val kx : Double, val ky : Double)
+
+
+data class PlotDataPointEvent(val dp : DataPoint)
+data class UiPlotPointsCommand(val plotIndex : Int, val points : Array<Pair<Int, Int>>)
+data class UiPlotTimeBreakCommand(val x: Int)
+data class UiPlotHorizontalGridCommand(val dy: Int, val y0 : Int)
+class UiPlotClearCommand
