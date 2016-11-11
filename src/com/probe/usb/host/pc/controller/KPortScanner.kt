@@ -36,6 +36,7 @@ object KPortScanner : Receiver() {
         this.portNames = comPortHasPortsEvent.ports
     }
 
+    @Suppress("UNUSED_PARAMETER")
     @Subscribe
     fun onNewFrame(parserFrameEvent: ParserFrameEvent) {
         lastFrameTime = Date()
@@ -59,6 +60,7 @@ object KPortScanner : Receiver() {
         curPort = portNames[nextIndex]
     }
 
+    @Suppress("UNUSED_PARAMETER")
     @Subscribe
     fun onTimerTick(tick: TickEvent) {
         if (!enabled ) {

@@ -4,9 +4,9 @@ import com.google.common.eventbus.Subscribe
 import com.probe.usb.host.bus.Bus
 import com.probe.usb.host.bus.Receiver
 import com.probe.usb.host.pc.controller.event.*
-import gnu.io.CommPortIdentifier
-import gnu.io.SerialPort
-import gnu.io.SerialPortEvent
+import purejavacomm.CommPortIdentifier
+import purejavacomm.SerialPort
+import purejavacomm.SerialPortEvent
 import java.util.*
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -65,7 +65,8 @@ object ComPortController : Receiver() {
         } catch (e: Exception) {
             logException("Cannot connect to a port " + portName, e)
             disconnect()
-            postEvent(ComPortFailureEvent("Cannot connect to a port " + portName))
+            postEvent(ComPortFailureEvent("Cannot connect to a port " + portName, portName))
+            return
         }
         postEvent(ComPortConnectionEvent(portName, true))
     }
@@ -81,7 +82,7 @@ object ComPortController : Receiver() {
         } catch (e: Exception) {
             logException("Cannot disconnect from a port " + serialPort?.getName(), e)
         }
-        Bus.post(ComPortConnectionEvent(serialPort?.name, false))
+        postEvent(ComPortConnectionEvent(serialPort?.name, false))
         serialPort = null
     }
 
@@ -110,7 +111,7 @@ object ComPortController : Receiver() {
         this.portsMap = HashMap<String, CommPortIdentifier>()
         val ports = CommPortIdentifier.getPortIdentifiers()
         while (ports.hasMoreElements()) {
-            val curPort = ports.nextElement() as CommPortIdentifier
+            val curPort = ports.nextElement()
             if (curPort.portType == CommPortIdentifier.PORT_SERIAL) {
                 portList.add(curPort.name)
                 this.portsMap.put(curPort.name, curPort)
@@ -161,7 +162,7 @@ object ComPortController : Receiver() {
                 postDelayedEvent(ComPortDataEvent(byteList.toByteArray(), dataEventCounter++))
         } catch (e: Exception) {
             logException("Cannot read data from a serial port", e)
-            postEvent(ComPortFailureEvent(e.toString()))
+            postEvent(ComPortReadFailureEvent(e.toString()))
         }
 
         inSerialEvent.set(false)

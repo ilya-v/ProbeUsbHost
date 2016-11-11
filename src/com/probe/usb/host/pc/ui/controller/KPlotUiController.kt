@@ -65,6 +65,7 @@ object KPlotUiController : UiReceiver() {
         }
     }
 
+    @Suppress("UNUSED_PARAMETER")
     @Subscribe
     fun plotClear(plotClear : UiPlotClearCommand) {
         Context.invokeUi { plot?.clear() }

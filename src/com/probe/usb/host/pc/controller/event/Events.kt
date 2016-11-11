@@ -25,8 +25,9 @@ data class ComPortDataEvent(val portData: ByteArray, val sync : Int) {
 }
 
 data class ComPortWriteCommand(val portData: ByteArray)
-data class ComPortFailureEvent(val message: String)
+data class ComPortFailureEvent(val message: String, val port: String)
 data class ComPortWriteFailureEvent(val message: String)
+data class ComPortReadFailureEvent(val message: String)
 
 class ParserFrameEvent
 

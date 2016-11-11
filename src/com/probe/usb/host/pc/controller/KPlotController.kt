@@ -78,6 +78,7 @@ object KPlotController :  Receiver() {
 
     }
 
+    @Suppress("UNUSED_PARAMETER")
     @Subscribe
     fun onPointControllerTick(tick: PointControllerTick) {
         updatePlot()

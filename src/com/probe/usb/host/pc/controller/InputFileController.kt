@@ -33,6 +33,7 @@ object InputFileController : Receiver() {
     }
 
 
+    @Suppress("UNUSED_PARAMETER")
     @Subscribe
     fun postNextChunk(event: MoreInputRawDataEvent) {
         if (fileData == null || dataPos >= fileData!!.size){

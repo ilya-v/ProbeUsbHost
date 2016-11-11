@@ -15,6 +15,7 @@ object KConnectionStateController : Receiver() {
         updateStatus(if (connectionEvent.connectionStatus) ConnectionStatus.Connected else ConnectionStatus.Disconnected)
     }
 
+    @Suppress("UNUSED_PARAMETER")
     @Subscribe
     fun onTimerTick(event: TickEvent) {
         if ((status == ConnectionStatus.Reading || status == ConnectionStatus.Data) && !gotBytes)
@@ -25,6 +26,7 @@ object KConnectionStateController : Receiver() {
         gotBytes = false
     }
 
+    @Suppress("UNUSED_PARAMETER")
     @Subscribe
     fun onNewByte(comPortDataEvent: ComPortDataEvent) {
         if (status != ConnectionStatus.Data)
@@ -32,6 +34,7 @@ object KConnectionStateController : Receiver() {
         gotBytes = true
     }
 
+    @Suppress("UNUSED_PARAMETER")
     @Subscribe
     fun onNewFrame(parserFrameEvent: ParserFrameEvent) {
         updateStatus(ConnectionStatus.Data)
