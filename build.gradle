@@ -4,10 +4,8 @@ buildscript {
     repositories {
         mavenCentral()
     }
-
     dependencies {
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
-
     }
 }
 
@@ -17,17 +15,15 @@ apply plugin: 'kotlin'
 apply plugin: 'application'
 apply plugin: 'maven'
 
-ext {
-    rxtxVersion = "2.2pre2"
-}
-
 repositories {
     mavenLocal()
     mavenCentral()
-    maven {
-        name "rxtx"
-        url "https://raw.github.com/grafjo/rxtx/master/releases/"
+    maven { url "https://jitpack.io" }
+    flatDir {
+        dirs "$rootDir/idea-redist/forms"
+        dirs "$rootDir/idea-redist/uiDesigner"
     }
+
 }
 
 sourceSets.main.java        { srcDir 'src' }
@@ -36,12 +32,43 @@ sourceSets.test.resources   { srcDir 'test-data' }
 
 mainClassName = 'com.probe.usb.host.pc.ProbeUsbHost'
 
-//defaulTasks 'run'
+configurations {
+    buildIdeaFormsTask
+}
+
 
 dependencies {
     compile group: 'com.google.guava', name: 'guava', version: '20.0'
     compile "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
-    compile "gnu.io:rxtx:$rxtxVersion"
+
+    compile 'com.github.nyholku:purejavacomm:v1.0.1'
+    compile group: 'com.intellij', name: 'uiDesigner'
+    compile group: 'com.intellij', name: 'forms_rt'
+
     testCompile 'junit:junit:4.12'
     testCompile "org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version"
+
+    buildIdeaFormsTask name: 'javac2'
+    buildIdeaFormsTask name: 'jdom'
+    buildIdeaFormsTask name: 'asm-all'
+    buildIdeaFormsTask name: 'jgoodies-forms'
+
 }
+
+
+task compileIdeaForms(dependsOn: configurations.compile.getTaskDependencyFromProjectDependency(true, 'jar')) {
+    doLast {
+        project.sourceSets.main.output.classesDir.mkdirs()
+        ant.taskdef name: 'javac2', classname: 'com.intellij.ant.Javac2', classpath: configurations.buildIdeaFormsTask.asPath
+        ant.javac2 srcdir: project.sourceSets.main.java.srcDirs.join(':'),
+                classpath: project.sourceSets.main.compileClasspath.asPath,
+                destdir: project.sourceSets.main.output.classesDir,
+                source: sourceCompatibility,
+                target: targetCompatibility,
+                includeAntRuntime: false
+    }
+}
+
+compileJava.dependsOn compileIdeaForms
+
+
