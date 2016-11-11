@@ -1,0 +1,2 @@
+socat -d -d pty,raw,echo=0 pty,raw,echo=0
+sudo ln --symbolic  /dev/pts/20 /dev/ttyD1
