@@ -25,7 +25,8 @@ object PlotFrame : JFrame() {
 
     data class Text(val x : Int, val y : Int, val text: String);
 
-    private val colors = arrayOf(Color.BLACK, Color.RED, Color.BLUE, Color.GREEN, Color.ORANGE, Color.CYAN)
+    private val colors = arrayOf(Color.BLACK, Color.RED, Color.BLUE, Color.GREEN, Color.ORANGE, Color.CYAN,
+            Color.LIGHT_GRAY)
 
     private var lines : MutableList<Line> = ArrayList()
     private var strings : MutableList<Text> = ArrayList()
@@ -39,8 +40,7 @@ object PlotFrame : JFrame() {
 
         val newWidth = size.width - insets.left - insets.right
         val newHeight = size.height - insets.top - insets.bottom
-        if (newWidth != plotWidth || newHeight != plotHeight)
-            onResize?.invoke(newWidth, newHeight)
+        val resized = newWidth != plotWidth || newHeight != plotHeight
         plotWidth = newWidth
         plotHeight = newHeight
 
@@ -48,21 +48,36 @@ object PlotFrame : JFrame() {
         fun stroke(width: Float) = BasicStroke(width, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND)
         graph.stroke = stroke(strokeWidth)
         for (line in lines) {
-            graph.color = colors[line.color % colors.size]
+            graph.color = colors[(line.color + colors.size) % colors.size]
             if (strokeWidth != line.width) {
                 strokeWidth = line.width
                 graph.stroke = stroke(strokeWidth)
             }
-            graph.drawLine( line.x1 + insets.left, line.y1 + insets.top,
-                            line.x2 + insets.left, line.y2 + insets.top)
+            var (x1, y1, x2, y2) = line
+            if (x1 == Int.MIN_VALUE) x1 = 0
+            if (x2 == Int.MAX_VALUE) x2 = plotWidth
+            if (y1 == Int.MIN_VALUE) y1 = 0
+            if (y2 == Int.MAX_VALUE) y2 = plotHeight
+            graph.drawLine(x1 + insets.left, y1 + insets.top, x2 + insets.left, y2 + insets.top)
         }
 
-        graphics.setFont(Font("Times New Roman", Font.PLAIN, 12))
-        for (text in strings)
-            graphics.drawString(text.text, text.x + insets.left, text.y + insets.top)
+        graph.setFont(Font("Times New Roman", Font.PLAIN, 12))
+        graph.color = colors[0]
+        for (text in strings) {
+            val x = if (text.x >= 0) text.x + insets.left
+                    else plotWidth + text.x - insets.right - graph.fontMetrics.stringWidth(text.text)
+            graph.drawString(text.text, x, text.y + insets.top)
+        }
+
+        if (resized)
+            onResize?.invoke(newWidth, newHeight)
     }
 
-    fun clear() =  lines.clear()
+    fun refresh() = plotPanel.repaint()
+    fun clear() {
+        lines.clear()
+        strings.clear()
+    }
     fun addLine(line : Line)  = lines.add(line)
     fun addText(x : Int, y : Int, text : String)  = strings.add(Text(x, y, text))
 }

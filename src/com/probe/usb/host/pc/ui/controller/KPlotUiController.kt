@@ -9,7 +9,6 @@ import java.util.*
 import javax.swing.JSlider
 import javax.swing.JToggleButton
 
-
 object KPlotUiController : UiReceiver() {
 
     private var btnPlot: JToggleButton? = null
@@ -39,6 +38,9 @@ object KPlotUiController : UiReceiver() {
         this.btnFitX = btnFitX
         this.btnFitY = btnFitY
 
+        this.btnFitY!!.addActionListener { postEvent( UiPlotFitYModeEvent(this.btnFitY!!.isSelected()) ) }
+        this.btnFitX!!.addActionListener { postEvent( UiPlotFitXModeEvent(this.btnFitX!!.isSelected()) ) }
+
         this.plot?.onResize = {w, h -> postEvent(UiPlotResizedEvent(w, h))}
         //{x : Int,  y : Int) -> Unit {postEvent(); } }
         plotClear(UiPlotClearCommand())
@@ -46,22 +48,30 @@ object KPlotUiController : UiReceiver() {
 
     @Subscribe
     fun plotData(plotPoints: UiPlotPointsCommand) {
+
+        val linesToPlot = ArrayList<PlotFrame.Line>()
+
+        var lp = if (plotPoints.points.isNotEmpty()) plotPoints.points[0] else Pair(0,0)
         for (pt in plotPoints.points)  {
             if (!lastPlotPoints.containsKey(plotPoints.plotIndex))
                 lastPlotPoints[plotPoints.plotIndex] = pt;
             val lpt = lastPlotPoints[plotPoints.plotIndex]
 
-            Context.invokeUi {
-                plot?.addLine(PlotFrame.Line(lpt!!.first, lpt.second, pt.first, pt.second, plotPoints.plotIndex))
-            }
+            linesToPlot.add(PlotFrame.Line(lpt!!.first, lpt.second, pt.first, pt.second, plotPoints.plotIndex))
             lastPlotPoints[plotPoints.plotIndex] = pt
+        }
+
+        Context.invokeUi {
+            for (line in linesToPlot)
+                plot?.addLine(line)
         }
     }
 
     @Subscribe
     fun plotTimeBreak(timeBreak : UiPlotTimeBreakCommand) {
         Context.invokeUi {
-            plot?.addLine(PlotFrame.Line(timeBreak.x, 0, timeBreak.x, plot!!.plotHeight))
+            for (tbx in timeBreak.breaks)
+            plot?.addLine(PlotFrame.Line(tbx, 0, tbx, plot!!.plotHeight))
         }
     }
 
@@ -71,20 +81,51 @@ object KPlotUiController : UiReceiver() {
         Context.invokeUi { plot?.clear() }
     }
 
+    @Suppress("UNUSED_PARAMETER")
+    @Subscribe
+    fun plotRefresh(event: UiPlotRefreshCommand) {
+        Context.invokeUi { plot?.refresh() }
+    }
+
     @Subscribe
     fun plotHorizontalGrid(grid: UiPlotHorizontalGridCommand) {
         Context.invokeUi {
             var y = grid.y0
+            val x1 = Int.MIN_VALUE
+            val x2 = Int.MAX_VALUE
+
+            plot!!.addLine(PlotFrame.Line(x1, y, x2, y, -1, 2.0f))
             while (y < plot?.plotHeight ?: 0) {
-                plot!!.addLine(PlotFrame.Line(0, y, plot!!.plotWidth, y))
+                plot!!.addLine(PlotFrame.Line(x1, y, x2, y, -1, 0.5f))
                 y += grid.dy
             }
             y = grid.y0
             while (y > 0) {
-                plot!!.addLine(PlotFrame.Line(0, y, plot!!.plotWidth, y))
+                plot!!.addLine(PlotFrame.Line(x1, y, x2, y, -1, 0.5f))
                 y -= grid.dy
             }
         }
     }
 
+    @Subscribe
+    fun plotText(text: UiPlotTextCommand) {
+        Context.invokeUi {
+            plot?.addText(text.x, text.y, text.text)
+        }
+    }
+
+    @Subscribe
+    fun onUiPlotCommand(commands: UiPlotCommand) {
+        Context.invokeUi {
+            for (c in commands.commands)
+                when (c) {
+                    is UiPlotTextCommand -> plotText(c)
+                    is UiPlotHorizontalGridCommand -> plotHorizontalGrid(c)
+                    is UiPlotRefreshCommand -> plotRefresh(c)
+                    is UiPlotClearCommand -> plotClear(c)
+                    is UiPlotTimeBreakCommand -> plotTimeBreak(c)
+                    is UiPlotPointsCommand -> plotData(c)
+                }
+        }
+    }
 }

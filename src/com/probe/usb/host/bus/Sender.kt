@@ -1,9 +1,12 @@
 package com.probe.usb.host.bus
 
+import com.probe.usb.host.pc.controller.event.SilentEvent
+
 interface Sender {
 
     fun postEvent(event : Any) {
-        System.out.println("Post: " + event + " from " + this.javaClass.simpleName)
+        if (event !is SilentEvent)
+            System.out.println("Post: " + event + " from " + this.javaClass.simpleName)
         Bus.post(event);
     }
 

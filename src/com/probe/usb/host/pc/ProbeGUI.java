@@ -8,9 +8,9 @@ import com.probe.usb.host.pc.controller.*;
 import com.probe.usb.host.pc.controller.event.ComPortConnectCommand;
 import com.probe.usb.host.pc.controller.event.EventDispatcher;
 import com.probe.usb.host.pc.controller.event.TickEvent;
-import com.probe.usb.host.pc.plot.Plot;
 import com.probe.usb.host.pc.ui.UiLookAndFeel;
 import com.probe.usb.host.pc.ui.controller.*;
+import com.probe.usb.host.pc.ui.frame.PlotFrame;
 import com.probe.usb.host.pc.ui.frame.ProbeMainWindow;
 
 import javax.swing.*;
@@ -25,9 +25,7 @@ import java.util.List;
 
 public class ProbeGUI {
 
-
     public static ProbeGUI instance;
-    public static Plot plot;
 
     private ProbeMainWindow ui = new ProbeMainWindow();
 
@@ -40,8 +38,10 @@ public class ProbeGUI {
         LoggerUiController.INSTANCE.setActive(true);
         Logger.INSTANCE.setActive(true);
         ParserController.INSTANCE.setActive(true);
+        KPlotController.INSTANCE.setActive(true);
         KPlotUiController.INSTANCE.setActive(true);
         EventDispatcher.INSTANCE.setActive(true);
+        PlotFrame.INSTANCE.setVisible(false);
     }
 
 
@@ -67,6 +67,13 @@ public class ProbeGUI {
     InputFileUiController inputFileUiController = new InputFileUiController(
             ui.btnInputFromFile, ui.btnChooseInputFile, ui.txtInputDataFile)
             .setPreferences(preferences);
+
+    {
+        KPlotUiController.INSTANCE.init(PlotFrame.INSTANCE,
+                ui.plotButton,
+                ui.plotSliderX, ui.plotSliderY,
+                ui.fitXToggleButton, ui.fitYToggleButton);
+    }
 
     Timer timer = new Timer(1000, e -> {
         Bus.post(new TickEvent());
@@ -122,7 +129,6 @@ public class ProbeGUI {
 
     public static void main(String args[]) {
         UiLookAndFeel.init();
-        plot = new Plot();
         instance = new ProbeGUI();
     }
 }
