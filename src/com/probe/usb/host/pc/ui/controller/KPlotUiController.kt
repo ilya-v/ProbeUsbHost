@@ -33,7 +33,7 @@ object KPlotUiController : UiReceiver() {
                 xSlider.value / xSlider.maximum.toDouble(),
                 ySlider.value / ySlider.maximum.toDouble())) }
         this.xSlider?.addChangeListener  { evt -> sliderEvent() }
-        this.xSlider?.addChangeListener  { evt -> sliderEvent() }
+        this.ySlider?.addChangeListener  { evt -> sliderEvent() }
 
         this.btnFitX = btnFitX
         this.btnFitY = btnFitY
@@ -51,14 +51,10 @@ object KPlotUiController : UiReceiver() {
 
         val linesToPlot = ArrayList<PlotFrame.Line>()
 
-        var lp = if (plotPoints.points.isNotEmpty()) plotPoints.points[0] else Pair(0,0)
+        var lpt = if (plotPoints.points.isNotEmpty()) plotPoints.points[0] else Pair(0,0)
         for (pt in plotPoints.points)  {
-            if (!lastPlotPoints.containsKey(plotPoints.plotIndex))
-                lastPlotPoints[plotPoints.plotIndex] = pt;
-            val lpt = lastPlotPoints[plotPoints.plotIndex]
-
-            linesToPlot.add(PlotFrame.Line(lpt!!.first, lpt.second, pt.first, pt.second, plotPoints.plotIndex))
-            lastPlotPoints[plotPoints.plotIndex] = pt
+            linesToPlot.add(PlotFrame.Line(lpt.first, lpt.second, pt.first, pt.second, plotPoints.plotIndex))
+            lpt = pt
         }
 
         Context.invokeUi {

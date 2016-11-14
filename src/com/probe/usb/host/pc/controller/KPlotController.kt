@@ -10,13 +10,15 @@ object KPlotController : Receiver() {
 
     class PointControllerTick : SilentEvent()
 
-    private val timerPeriodMs = 250L
+    private val timerPeriodMs = 100L
 
     private var shouldRedrawPlot = true
     private var shouldCleanPlot = true
 
-    private val maxDisplayTimeSpan = 30
-    private val maxAccAmplitude = 25
+    private val maxDisplayTimeSpan = 30.0
+    private val minDisplayTimeSpan = 0.01
+    private val maxAccAmplitude = 25.0
+    private val minAccAmplitude = 1.0
     private val accGridStep = 1.0
 
     private data class RealPoint(val t: Double, val y: Double)
@@ -83,9 +85,12 @@ object KPlotController : Receiver() {
 
     @Subscribe
     fun onUiPlotSliderEvent(event: UiPlotSliderEvent) {
-
-        //event.kx
-
+        timeScaler.displayMaxTime = timeScaler.displayMinTime +
+            event.kx * event.kx * (maxDisplayTimeSpan - minDisplayTimeSpan) + minDisplayTimeSpan
+        accScaler.displayMaxAcc = event.ky * (maxAccAmplitude - minAccAmplitude) + minDisplayTimeSpan
+        accScaler.displayMinAcc =  -accScaler.displayMaxAcc
+        shouldRedrawPlot = true
+        shouldCleanPlot = true
     }
 
     private fun realToMappedPoints(rps: ArrayList<RealPoint>): Array<Pair<Int, Int>> {
@@ -124,13 +129,6 @@ object KPlotController : Receiver() {
         val displayText1 = String.format("%.2fs", timeScaler.displayMinTime)
         val textX2 = -5
         val displayText2 = String.format("%.2fs", timeScaler.displayMaxTime)
-
-        var pa = if (ax.isEmpty()) RealPoint(0.0,0.0) else ax[0]
-        for (a in ax) {
-            if (a.t < pa.t)
-                System.out.println("" + a.t)
-            pa = a
-        }
 
         plotCommands.add(UiPlotHorizontalGridCommand(gridStepY, gridY0))
         plotCommands.add(UiPlotTextCommand(textX1, gridY0, displayText1))
@@ -299,8 +297,8 @@ object KPlotController : Receiver() {
         fun onDataPoint(displayTime: Double, acc: Double) {
             minDisplayTime = Math.min(displayTime, minDisplayTime)
             maxDisplayTime = Math.max(displayTime, maxDisplayTime)
-            minAcc = Math.min(displayTime, minAcc)
-            maxAcc = Math.max(displayTime, maxAcc)
+            minAcc = Math.min(acc, minAcc)
+            maxAcc = Math.max(acc, maxAcc)
         }
     }
 }
