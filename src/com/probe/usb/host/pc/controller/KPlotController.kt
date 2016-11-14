@@ -62,12 +62,16 @@ object KPlotController : Receiver() {
 
     @Subscribe
     fun onUiPlotResized(event: UiPlotResizedEvent) {
-        if (timeScaler.plotWidthPixels == event.w && accScaler.plotHeightPixels == event.h)
-            return
         shouldRedrawPlot = true
         shouldCleanPlot = true
         timeScaler.plotWidthPixels = event.w
         accScaler.plotHeightPixels = event.h
+
+        timeScaler.displayMaxTime = timeScaler.displayMinTime +
+                event.sliderKx * event.sliderKx * (maxDisplayTimeSpan - minDisplayTimeSpan) + minDisplayTimeSpan
+        accScaler.displayMaxAcc = event.sliderKy * (maxAccAmplitude - minAccAmplitude) + minDisplayTimeSpan
+        accScaler.displayMinAcc =  -accScaler.displayMaxAcc
+
         updatePlot()
     }
 
@@ -81,16 +85,6 @@ object KPlotController : Receiver() {
     fun onUiPlotFitXModeEvent(event: UiPlotFitXModeEvent) {
         modeController.fitX = event.fitX
         modeController.onPlotUpdate()
-    }
-
-    @Subscribe
-    fun onUiPlotSliderEvent(event: UiPlotSliderEvent) {
-        timeScaler.displayMaxTime = timeScaler.displayMinTime +
-            event.kx * event.kx * (maxDisplayTimeSpan - minDisplayTimeSpan) + minDisplayTimeSpan
-        accScaler.displayMaxAcc = event.ky * (maxAccAmplitude - minAccAmplitude) + minDisplayTimeSpan
-        accScaler.displayMinAcc =  -accScaler.displayMaxAcc
-        shouldRedrawPlot = true
-        shouldCleanPlot = true
     }
 
     private fun realToMappedPoints(rps: ArrayList<RealPoint>): Array<Pair<Int, Int>> {

@@ -29,9 +29,10 @@ object KPlotUiController : UiReceiver() {
         this.plot = plot
 
         this.btnPlot?.addActionListener { evt -> plot.isVisible = this.btnPlot!!.isSelected }
-        val sliderEvent  : () -> Unit = { postEvent(UiPlotSliderEvent(
+        val sliderEvent  : () -> Unit = { postEvent(UiPlotResizedEvent(
+                this.plot?.plotWidth?:0, this.plot?.plotHeight?:0,
                 xSlider.value / xSlider.maximum.toDouble(),
-                ySlider.value / ySlider.maximum.toDouble())) }
+                ySlider.value / ySlider.maximum.toDouble()) ) }
         this.xSlider?.addChangeListener  { evt -> sliderEvent() }
         this.ySlider?.addChangeListener  { evt -> sliderEvent() }
 
@@ -41,8 +42,9 @@ object KPlotUiController : UiReceiver() {
         this.btnFitY!!.addActionListener { postEvent( UiPlotFitYModeEvent(this.btnFitY!!.isSelected()) ) }
         this.btnFitX!!.addActionListener { postEvent( UiPlotFitXModeEvent(this.btnFitX!!.isSelected()) ) }
 
-        this.plot?.onResize = {w, h -> postEvent(UiPlotResizedEvent(w, h))}
-        //{x : Int,  y : Int) -> Unit {postEvent(); } }
+        this.plot?.onResize = {w, h -> postEvent(UiPlotResizedEvent(w, h,
+                xSlider.value / xSlider.maximum.toDouble(),
+                ySlider.value / ySlider.maximum.toDouble()) )}
         plotClear(UiPlotClearCommand())
     }
 
