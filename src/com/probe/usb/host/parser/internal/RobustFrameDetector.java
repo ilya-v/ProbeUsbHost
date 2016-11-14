@@ -21,9 +21,9 @@ public class RobustFrameDetector {
         int getSelected() { return selected; }
         void select() {
             final int
-                    maxIdx = getMaxSyncIdx(),
-                    maxSyncCount = frameDetectors[maxIdx].getSyncFramesCount(),
-                    secondMaxSyncCount = getSecondMaxSyncCount(maxIdx);
+                    maxIdx = getMaxHistoricSyncIdx(),
+                    maxSyncCount = frameDetectors[maxIdx].getHistoricSyncCount(),
+                    secondMaxSyncCount = getSecondMaxHistoricSyncCount(maxIdx);
             hasPreference =  (secondMaxSyncCount + minDiffSync <= maxSyncCount);
             selected =  hasPreference?  maxIdx      :
                         selected >= 0?  selected    :
@@ -91,28 +91,28 @@ public class RobustFrameDetector {
         return result;
     }
 
-    protected int getMaxSyncIdx() {
+    protected int getMaxHistoricSyncIdx() {
         int maxSyncCount = 0;
         int maxIdx = 0;
 
         int idx = 0;
         for (FrameDetector fd : frameDetectors) {
-            if (fd.getSyncFramesCount() > maxSyncCount) {
+            if (fd.getHistoricSyncCount() > maxSyncCount) {
                 maxIdx = idx;
-                maxSyncCount = fd.getSyncFramesCount();
+                maxSyncCount = fd.getHistoricSyncCount();
             }
             idx++;
         }
         return maxIdx;
     }
 
-    protected int getSecondMaxSyncCount(final int maxSyncIdx) {
+    protected int getSecondMaxHistoricSyncCount(final int maxSyncIdx) {
         int secondMaxSyncCount = 0;
         int idx = 0;
         for (FrameDetector fd : frameDetectors) {
-            final int fdSyncCount = fd.getSyncFramesCount();
+            final int fdSyncCount = fd.getHistoricSyncCount();
             if ( fdSyncCount > secondMaxSyncCount && idx != maxSyncIdx ) {
-                secondMaxSyncCount = fd.getSyncFramesCount();
+                secondMaxSyncCount = fd.getHistoricSyncCount();
             }
             idx++;
         }

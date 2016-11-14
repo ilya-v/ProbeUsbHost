@@ -39,7 +39,5 @@ public class PrintProcessorTest {
             result1 += parsed;
             System.out.print(parsed);
         }
-
-
     }
 }

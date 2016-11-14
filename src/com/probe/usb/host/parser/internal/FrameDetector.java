@@ -11,6 +11,7 @@ public class FrameDetector {
     protected List<Integer> bytes = new ArrayList<>();
     protected int nFramesInSync = 0;
     protected int nextCounter = -1;
+    protected int nHistoricSync = 0;
 
 
     public FrameDetector setMinFramesInSync(final int minFramesInSync) {
@@ -41,6 +42,8 @@ public class FrameDetector {
         if (inSync && !haveGrayFrames)
             nFramesInSync ++;
 
+        nHistoricSync = (inSync? nHistoricSync + 1 : 0);
+
         nextCounter = DataFormat.nextCounter(newCounter);
 
         final int nGrayFrames = bytes.size() / frameSize - nFramesInSync;
@@ -50,6 +53,10 @@ public class FrameDetector {
 
     public int getSyncFramesCount() {
         return nFramesInSync;
+    }
+
+    public int getHistoricSyncCount() {
+        return nHistoricSync;
     }
 
     public int getTotalFramesCount() {

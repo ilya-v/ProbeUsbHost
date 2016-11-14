@@ -1,6 +1,7 @@
 package com.probe.usb.host.parser.processor;
 
-import com.probe.usb.host.parser.internal.*;
+import com.probe.usb.host.parser.internal.DataPoint;
+import com.probe.usb.host.parser.internal.UnixTime;
 import com.probe.usb.host.parser.internal.message.AccRegMessage;
 import com.probe.usb.host.parser.internal.message.GenericMessage;
 import com.probe.usb.host.parser.internal.message.UnixTimeMessage;
@@ -93,7 +94,7 @@ public class TablePrintProcessor extends PrintProcessor {
         String output = "";
         final int L = bytes.length;
         for (int i = 0; i < L/2; i++)
-            output += String.format(format, header, 2.0, (double)bytes[2*i], (double)bytes[2*i + 1]);
+            output += String.format(format, (double)header, 2.0, (double)bytes[2*i], (double)bytes[2*i + 1]);
         return output + (L % 2 > 0?
                 String.format(format, (double)header, 1.0, (double)bytes[L-1], 0.0) : "");
     }
