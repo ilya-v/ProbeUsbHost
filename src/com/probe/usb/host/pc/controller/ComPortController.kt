@@ -139,19 +139,6 @@ object ComPortController : Receiver() {
 
                 byteList.add(b.toByte())
 
-                /* if (date.time + 2000 < Date().time) {
-                    counter ++
-                    str?.close()
-                    str = null
-                }
-                if (str == null) {
-                    val f = File("/home/user/test/" + counter + ".out")
-                    f.createNewFile()
-                    str = FileOutputStream(f)
-                }
-                date = Date()
-                str?.write(b) */
-
                 if (byteList.size >= byteChunkSize) {
                     postDelayedEvent(ComPortDataEvent(byteList.toByteArray(), dataEventCounter++))
                     byteList.clear()
