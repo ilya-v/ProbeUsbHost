@@ -2,9 +2,9 @@ package com.probe.usb.host.commander;
 
 import com.probe.usb.host.common.ConfigParamType;
 
-import java.util.List;
-import java.util.Date;
 import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
 
 import static com.probe.usb.host.common.ConfigCommand.*;
 
@@ -50,7 +50,7 @@ public class ProbeUsbCommander
     }
     
     public void deviceAccRegWrite(final int regAddress, final int regValue) {
-        bytesToDevice(accRegWrite.getFirstByte(), (short)regAddress, (short)0, (short)regValue );
+        bytesToDevice(accRegWrite.getFirstByte(), (short)regAddress, (short)regValue, (short)0);
     }
     
     public void deviceAccRegRead(final int regAddress) {
