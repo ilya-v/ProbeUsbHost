@@ -45,7 +45,7 @@ public class CommandSender extends Receiver {
         if (bytes == null)
             return;
 
-        String logLine = "";
+        String logLine = "Sending: ";
         for (byte b : bytes)
             logLine += String.format("%02X ", b);
 

@@ -18,6 +18,6 @@ public class AccRegMessage extends GenericMessage {
         String result = "";
         if (packetData.length >= DataFormat.messageLength)
             result += "REG[" + getRegisterAddress() + "] = " + String.format("%02X%02X", packetData[2], packetData[3]);
-        return result  + (result.isEmpty()? "" : " ") + super.getValue();
+        return result + (result.isEmpty() ? "" : " ") + super.getValue();
     }
 }

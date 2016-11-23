@@ -13,7 +13,7 @@ class PlotControllerTest {
         timeScaler.displayMaxTime = 10.0
         timeScaler.plotWidthPixels = 100
 
-        var realTime = 0.0
+        var realTime : Double
 
         realTime = 50.0
         timeScaler.onNewRealTimeValue(realTime)

@@ -83,7 +83,7 @@ public class OutputController extends Receiver {
         final String line = msgPrintProcessor.popResult();
         if (!line.isEmpty()) {
             msgWriter.write(line.getBytes());
-            postEvent(new InfoLogEvent(line));
+            postEvent(new InfoLogEvent("Received: " + line));
             updateFileStatus(OutputChannel.MSG_DATA, msgWriter);
         }
 
@@ -106,7 +106,9 @@ public class OutputController extends Receiver {
             preferences.saveLastFileName(chan.name(), actualName);
 
         if (actualName != null && (actualN != storedN || fileNameChanged)) {
-            String fname = actualName.replaceFirst(this.outputDir, "");
+            String fname = actualName;
+            if (actualName.startsWith(this.outputDir))
+                fname = actualName.substring(this.outputDir.length());
             final boolean slash = fname.startsWith("/") || fname.startsWith("\\");
             fname = fname.substring(slash ? 1 : 0);
             postEvent(new UiOutputFileStatusCommand(chan, fname, Long.toString(actualN)));
