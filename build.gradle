@@ -69,6 +69,6 @@ task compileIdeaForms(dependsOn: configurations.compile.getTaskDependencyFromPro
     }
 }
 
-compileJava.dependsOn compileIdeaForms
+jar.dependsOn compileIdeaForms
 
 
